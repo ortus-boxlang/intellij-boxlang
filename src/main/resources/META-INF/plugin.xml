@@ -29,11 +29,19 @@
       extensions="bx;bxm;bxs"
       implementationClass="com.ortussolutions.intellijboxlang.file.BoxLangFileType" />
 
+    <lang.parserDefinition
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.parser.BoxLangParserDefinition" />
+
     <lang.syntaxHighlighterFactory
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.highlighting.BoxLangSyntaxHighlighterFactory" />
 
     <colorSettingsPage implementation="com.ortussolutions.intellijboxlang.highlighting.BoxLangColorSettingsPage" />
+
+    <annotator
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.lsp.BoxLangLspAnnotator" />
 
     <projectConfigurable
       id="boxlang.project.settings"
