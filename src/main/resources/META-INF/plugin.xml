@@ -36,4 +36,14 @@
     <colorSettingsPage implementation="com.ortussolutions.intellijboxlang.highlighting.BoxLangColorSettingsPage" />
 
   </extensions>
+
+  <actions>
+    <action
+      id="BoxLang.NewFile"
+      class="com.ortussolutions.intellijboxlang.actions.BoxLangCreateFileAction"
+      text="BoxLang File"
+      description="Create a BoxLang file">
+      <add-to-group group-id="NewGroup" anchor="last" />
+    </action>
+  </actions>
 </idea-plugin>
