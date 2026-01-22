@@ -55,6 +55,7 @@ public final class BoxLangLspClientService {
     private final Map<String, Integer> documentVersions = new ConcurrentHashMap<>();
     private final Map<String, Long> documentStamps = new ConcurrentHashMap<>();
     private final Map<String, CachedTokens> tokenCache = new ConcurrentHashMap<>();
+    private final Map<String, CachedSymbols> symbolCache = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean starting = new java.util.concurrent.atomic.AtomicBoolean(false);
     private final Object startLock = new Object();
 
@@ -96,6 +97,30 @@ public final class BoxLangLspClientService {
         } catch (Exception e) {
             LOG.debug("Failed to request semantic tokens", e);
             return null;
+        }
+    }
+
+    public List<org.eclipse.lsp4j.DocumentSymbol> requestDocumentSymbols(VirtualFile file, Document document) {
+        if (!ensureStarted()) {
+            return List.of();
+        }
+        String uri = toUri(file);
+        CachedSymbols cached = symbolCache.get(uri);
+        if (cached != null && cached.stamp == document.getModificationStamp()) {
+            return cached.symbols;
+        }
+        syncDocument(uri, document);
+        org.eclipse.lsp4j.DocumentSymbolParams params =
+            new org.eclipse.lsp4j.DocumentSymbolParams(new TextDocumentIdentifier(uri));
+        try {
+            var future = server.getTextDocumentService().documentSymbol(params);
+            var result = future.get(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            List<org.eclipse.lsp4j.DocumentSymbol> symbols = mapDocumentSymbols(result);
+            symbolCache.put(uri, new CachedSymbols(document.getModificationStamp(), symbols));
+            return symbols;
+        } catch (Exception e) {
+            LOG.debug("Failed to request document symbols", e);
+            return List.of();
         }
     }
 
@@ -303,6 +328,33 @@ public final class BoxLangLspClientService {
         return file.toNioPath().toUri().toString();
     }
 
+    private List<org.eclipse.lsp4j.DocumentSymbol> mapDocumentSymbols(
+        List<org.eclipse.lsp4j.jsonrpc.messages.Either<
+            org.eclipse.lsp4j.SymbolInformation,
+            org.eclipse.lsp4j.DocumentSymbol>> result
+    ) {
+        if (result == null) {
+            return List.of();
+        }
+        List<org.eclipse.lsp4j.DocumentSymbol> symbols = new ArrayList<>();
+        for (var entry : result) {
+            if (entry.isRight()) {
+                symbols.add(entry.getRight());
+                continue;
+            }
+            org.eclipse.lsp4j.SymbolInformation info = entry.getLeft();
+            org.eclipse.lsp4j.DocumentSymbol symbol = new org.eclipse.lsp4j.DocumentSymbol();
+            symbol.setName(info.getName());
+            symbol.setKind(info.getKind());
+            if (info.getLocation() != null) {
+                symbol.setRange(info.getLocation().getRange());
+                symbol.setSelectionRange(info.getLocation().getRange());
+            }
+            symbols.add(symbol);
+        }
+        return symbols;
+    }
+
     private static final class CachedTokens {
         private final long stamp;
         private final SemanticTokens tokens;
@@ -310,6 +362,16 @@ public final class BoxLangLspClientService {
         private CachedTokens(long stamp, SemanticTokens tokens) {
             this.stamp = stamp;
             this.tokens = tokens;
+        }
+    }
+
+    private static final class CachedSymbols {
+        private final long stamp;
+        private final List<org.eclipse.lsp4j.DocumentSymbol> symbols;
+
+        private CachedSymbols(long stamp, List<org.eclipse.lsp4j.DocumentSymbol> symbols) {
+            this.stamp = stamp;
+            this.symbols = symbols;
         }
     }
 }

@@ -43,6 +43,10 @@
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.lsp.BoxLangLspAnnotator" />
 
+    <lang.psiStructureViewFactory
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.structure.BoxLangStructureViewFactory" />
+
     <projectConfigurable
       id="boxlang.project.settings"
       displayName="BoxLang"
