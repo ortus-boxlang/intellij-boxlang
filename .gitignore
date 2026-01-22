@@ -6,6 +6,7 @@ build/
 
 ### IntelliJ IDEA ###
 .intellijPlatform/
+.idea/
 .run/
 .idea/modules.xml
 .idea/jarRepositories.xml
