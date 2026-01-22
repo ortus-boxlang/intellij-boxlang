@@ -33,6 +33,10 @@ public final class BoxLangTextAttributes {
         "BOXLANG_OPERATOR",
         DefaultLanguageHighlighterColors.OPERATION_SIGN
     );
+    public static final TextAttributesKey TAG = TextAttributesKey.createTextAttributesKey(
+        "BOXLANG_TAG",
+        resolveHtmlTagKey()
+    );
     public static final TextAttributesKey BRACE = TextAttributesKey.createTextAttributesKey(
         "BOXLANG_BRACE",
         DefaultLanguageHighlighterColors.BRACES
@@ -61,6 +65,17 @@ public final class BoxLangTextAttributes {
         "BOXLANG_BAD_CHARACTER",
         HighlighterColors.BAD_CHARACTER
     );
+
+    private static TextAttributesKey resolveHtmlTagKey() {
+        TextAttributesKey key = TextAttributesKey.find("HTML_TAG_NAME");
+        if (key == null) {
+            key = TextAttributesKey.find("HTML_TAG");
+        }
+        if (key == null) {
+            key = TextAttributesKey.find("XML_TAG_NAME");
+        }
+        return key != null ? key : DefaultLanguageHighlighterColors.MARKUP_TAG;
+    }
 
     private BoxLangTextAttributes() {
     }

@@ -34,6 +34,8 @@ public final class BoxLangSyntaxHighlighter extends SyntaxHighlighterBase {
             key = BoxLangTextAttributes.BLOCK_COMMENT;
         } else if (tokenType == BoxLangTokenTypes.OPERATOR) {
             key = BoxLangTextAttributes.OPERATOR;
+        } else if (tokenType == BoxLangTokenTypes.TAG) {
+            key = BoxLangTextAttributes.TAG;
         } else if (tokenType == BoxLangTokenTypes.BRACE) {
             key = BoxLangTextAttributes.BRACE;
         } else if (tokenType == BoxLangTokenTypes.PAREN) {

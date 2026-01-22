@@ -74,6 +74,7 @@ component {
         new AttributesDescriptor("Line comment", BoxLangTextAttributes.LINE_COMMENT),
         new AttributesDescriptor("Block comment", BoxLangTextAttributes.BLOCK_COMMENT),
         new AttributesDescriptor("Operator", BoxLangTextAttributes.OPERATOR),
+        new AttributesDescriptor("HTML Tag", BoxLangTextAttributes.TAG),
         new AttributesDescriptor("Brace", BoxLangTextAttributes.BRACE),
         new AttributesDescriptor("Parenthesis", BoxLangTextAttributes.PAREN),
         new AttributesDescriptor("Bracket", BoxLangTextAttributes.BRACKET),

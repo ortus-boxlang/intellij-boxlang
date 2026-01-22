@@ -100,6 +100,13 @@ public final class BoxLangLexer extends LexerBase {
             return;
         }
 
+        if (matchTagStart(position)) {
+            position = consumeTag(position + 1);
+            tokenType = BoxLangTokenTypes.TAG;
+            tokenEnd = position;
+            return;
+        }
+
         if (current == '\'' || current == '"') {
             position = consumeString(position, current);
             tokenType = BoxLangTokenTypes.STRING;
@@ -250,6 +257,32 @@ public final class BoxLangLexer extends LexerBase {
             }
         }
         return true;
+    }
+
+    private boolean matchTagStart(int offset) {
+        if (offset >= bufferEnd || buffer.charAt(offset) != '<') {
+            return false;
+        }
+        int index = offset + 1;
+        if (index < bufferEnd && buffer.charAt(index) == '/') {
+            index++;
+        }
+        return match(index, "bx:");
+    }
+
+    private int consumeTag(int start) {
+        int index = start;
+        while (index < bufferEnd) {
+            char current = buffer.charAt(index);
+            if (current == '>') {
+                return index + 1;
+            }
+            if (current == '\n' || current == '\r') {
+                return index;
+            }
+            index++;
+        }
+        return bufferEnd;
     }
 
     private static final Set<String> KEYWORDS = new HashSet<>(Arrays.asList(

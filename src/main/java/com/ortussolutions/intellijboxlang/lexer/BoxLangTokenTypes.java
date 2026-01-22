@@ -11,6 +11,7 @@ public final class BoxLangTokenTypes {
     public static final IElementType LINE_COMMENT = new BoxLangTokenType("LINE_COMMENT");
     public static final IElementType BLOCK_COMMENT = new BoxLangTokenType("BLOCK_COMMENT");
     public static final IElementType OPERATOR = new BoxLangTokenType("OPERATOR");
+    public static final IElementType TAG = new BoxLangTokenType("TAG");
     public static final IElementType BRACE = new BoxLangTokenType("BRACE");
     public static final IElementType PAREN = new BoxLangTokenType("PAREN");
     public static final IElementType BRACKET = new BoxLangTokenType("BRACKET");
