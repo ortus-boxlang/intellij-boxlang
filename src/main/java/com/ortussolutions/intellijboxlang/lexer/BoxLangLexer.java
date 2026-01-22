@@ -310,6 +310,7 @@ public final class BoxLangLexer extends LexerBase {
         "new",
         "null",
         "or",
+        "property",
         "private",
         "protected",
         "public",
