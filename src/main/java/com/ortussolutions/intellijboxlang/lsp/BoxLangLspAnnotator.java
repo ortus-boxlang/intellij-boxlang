@@ -43,6 +43,9 @@ public final class BoxLangLspAnnotator implements Annotator {
         }
 
         BoxLangLspClientService lspService = BoxLangLspClientService.getInstance(project);
+        if (psiFile.getVirtualFile() != null) {
+            annotateDiagnostics(lspService, psiFile, document, holder);
+        }
         SemanticTokens tokens = lspService.requestSemanticTokens(psiFile.getVirtualFile(), document);
         SemanticTokensLegend legend = lspService.getLegend();
         if (tokens == null || legend == null) {
@@ -102,6 +105,47 @@ public final class BoxLangLspAnnotator implements Annotator {
             case "namespace" -> DefaultLanguageHighlighterColors.CLASS_NAME;
             case "tag" -> BoxLangTextAttributes.TAG;
             default -> BoxLangTextAttributes.IDENTIFIER;
+        };
+    }
+
+    private void annotateDiagnostics(BoxLangLspClientService lspService, PsiFile psiFile, Document document, AnnotationHolder holder) {
+        List<org.eclipse.lsp4j.Diagnostic> diagnostics =
+            lspService.requestDiagnostics(psiFile.getVirtualFile(), document);
+        if (diagnostics.isEmpty()) {
+            return;
+        }
+        for (org.eclipse.lsp4j.Diagnostic diagnostic : diagnostics) {
+            if (diagnostic.getRange() == null) {
+                continue;
+            }
+            int startOffset = offsetFor(document, diagnostic.getRange().getStart().getLine(), diagnostic.getRange().getStart().getCharacter());
+            int endOffset = offsetFor(document, diagnostic.getRange().getEnd().getLine(), diagnostic.getRange().getEnd().getCharacter());
+            if (startOffset >= endOffset) {
+                continue;
+            }
+            holder.newAnnotation(mapSeverity(diagnostic.getSeverity()), diagnostic.getMessage())
+                .range(new TextRange(startOffset, endOffset))
+                .create();
+        }
+    }
+
+    private int offsetFor(Document document, int line, int column) {
+        if (line < 0 || line >= document.getLineCount()) {
+            return document.getTextLength();
+        }
+        int start = document.getLineStartOffset(line);
+        return Math.min(start + Math.max(column, 0), document.getTextLength());
+    }
+
+    private HighlightSeverity mapSeverity(org.eclipse.lsp4j.DiagnosticSeverity severity) {
+        if (severity == null) {
+            return HighlightSeverity.WARNING;
+        }
+        return switch (severity) {
+            case Error -> HighlightSeverity.ERROR;
+            case Warning -> HighlightSeverity.WARNING;
+            case Information -> HighlightSeverity.INFORMATION;
+            case Hint -> HighlightSeverity.WEAK_WARNING;
         };
     }
 }

@@ -12,10 +12,21 @@ import java.util.concurrent.CompletableFuture;
 
 public final class BoxLangLspClient implements LanguageClient {
     private static final Logger LOG = Logger.getInstance(BoxLangLspClient.class);
+    private final BoxLangLspClientService service;
+
+    public BoxLangLspClient(BoxLangLspClientService service) {
+        this.service = service;
+    }
 
     @Override
     public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
         LOG.debug("Diagnostics: " + diagnostics.getUri());
+        if (diagnostics.getDiagnostics() != null && !diagnostics.getDiagnostics().isEmpty()) {
+            diagnostics.getDiagnostics().forEach(diagnostic ->
+                LOG.debug("Diagnostic: " + diagnostic.getMessage() + " (" + diagnostic.getSeverity() + ")")
+            );
+        }
+        service.updateDiagnostics(diagnostics.getUri(), diagnostics.getDiagnostics());
     }
 
     @Override

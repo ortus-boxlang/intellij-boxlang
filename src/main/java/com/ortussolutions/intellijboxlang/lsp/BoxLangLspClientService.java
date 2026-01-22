@@ -5,10 +5,13 @@ import com.intellij.openapi.components.Service;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.fileEditor.FileDocumentManager;
+import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.execution.ParametersListUtil;
+import com.intellij.util.messages.MessageBusConnection;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
@@ -56,8 +59,10 @@ public final class BoxLangLspClientService {
     private final Map<String, Long> documentStamps = new ConcurrentHashMap<>();
     private final Map<String, CachedTokens> tokenCache = new ConcurrentHashMap<>();
     private final Map<String, CachedSymbols> symbolCache = new ConcurrentHashMap<>();
+    private final Map<String, List<org.eclipse.lsp4j.Diagnostic>> diagnostics = new ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicBoolean starting = new java.util.concurrent.atomic.AtomicBoolean(false);
     private final Object startLock = new Object();
+    private boolean diagnosticPullSupported = false;
 
     private Process process;
     private Socket socket;
@@ -66,6 +71,16 @@ public final class BoxLangLspClientService {
 
     public BoxLangLspClientService(Project project) {
         this.project = project;
+        MessageBusConnection connection = project.getMessageBus().connect();
+        connection.subscribe(FileDocumentManagerListener.TOPIC, new FileDocumentManagerListener() {
+            @Override
+            public void beforeDocumentSaving(Document document) {
+                VirtualFile file = FileDocumentManager.getInstance().getFile(document);
+                if (file != null && isBoxLangFile(file)) {
+                    notifyDidSave(file, document);
+                }
+            }
+        });
     }
 
     public static BoxLangLspClientService getInstance(Project project) {
@@ -196,7 +211,7 @@ public final class BoxLangLspClientService {
         process = commandLine.createProcess();
         socket = connectWithRetries(port);
 
-        BoxLangLspClient client = new BoxLangLspClient();
+        BoxLangLspClient client = new BoxLangLspClient(this);
         var launcher = LSPLauncher.createClientLauncher(client, socket.getInputStream(), socket.getOutputStream());
         server = launcher.getRemoteProxy();
         launcher.startListening();
@@ -206,6 +221,8 @@ public final class BoxLangLspClientService {
         legend = result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
             ? result.getCapabilities().getSemanticTokensProvider().getLegend()
             : null;
+        diagnosticPullSupported = result.getCapabilities() != null
+            && result.getCapabilities().getDiagnosticProvider() != null;
         server.initialized(new InitializedParams());
     }
 
@@ -250,6 +267,7 @@ public final class BoxLangLspClientService {
         if (version == 1) {
             TextDocumentItem item = new TextDocumentItem(uri, "boxlang", version, document.getText());
             server.getTextDocumentService().didOpen(new org.eclipse.lsp4j.DidOpenTextDocumentParams(item));
+            notifyDidSave(uri, document);
         } else {
             VersionedTextDocumentIdentifier identifier = new VersionedTextDocumentIdentifier(uri, version);
             TextDocumentContentChangeEvent change = new TextDocumentContentChangeEvent(document.getText());
@@ -328,6 +346,76 @@ public final class BoxLangLspClientService {
         return file.toNioPath().toUri().toString();
     }
 
+    private boolean isBoxLangFile(VirtualFile file) {
+        String extension = file.getExtension();
+        if (extension == null) {
+            return false;
+        }
+        return extension.equalsIgnoreCase("bx")
+            || extension.equalsIgnoreCase("bxm")
+            || extension.equalsIgnoreCase("bxs");
+    }
+
+    public List<org.eclipse.lsp4j.Diagnostic> requestDiagnostics(VirtualFile file, Document document) {
+        if (!ensureStarted()) {
+            return List.of();
+        }
+        String uri = toUri(file);
+        syncDocument(uri, document);
+        if (diagnosticPullSupported) {
+            List<org.eclipse.lsp4j.Diagnostic> pulled = pullDiagnostics(uri);
+            if (pulled != null) {
+                return pulled;
+            }
+        }
+        return diagnostics.getOrDefault(uri, List.of());
+    }
+
+    void updateDiagnostics(String uri, List<org.eclipse.lsp4j.Diagnostic> list) {
+        if (list == null) {
+            diagnostics.remove(uri);
+        } else {
+            diagnostics.put(uri, List.copyOf(list));
+        }
+    }
+
+    private void notifyDidSave(VirtualFile file, Document document) {
+        if (!ensureStarted()) {
+            return;
+        }
+        String uri = toUri(file);
+        syncDocument(uri, document);
+        notifyDidSave(uri, document);
+    }
+
+    private void notifyDidSave(String uri, Document document) {
+        org.eclipse.lsp4j.DidSaveTextDocumentParams params = new org.eclipse.lsp4j.DidSaveTextDocumentParams();
+        params.setTextDocument(new TextDocumentIdentifier(uri));
+        params.setText(document.getText());
+        server.getTextDocumentService().didSave(params);
+    }
+
+    private List<org.eclipse.lsp4j.Diagnostic> pullDiagnostics(String uri) {
+        try {
+            org.eclipse.lsp4j.DocumentDiagnosticParams params = new org.eclipse.lsp4j.DocumentDiagnosticParams();
+            params.setTextDocument(new TextDocumentIdentifier(uri));
+            org.eclipse.lsp4j.DocumentDiagnosticReport report =
+                server.getTextDocumentService().diagnostic(params).get(REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (report != null && report.isRelatedFullDocumentDiagnosticReport()) {
+                List<org.eclipse.lsp4j.Diagnostic> items =
+                    report.getRelatedFullDocumentDiagnosticReport().getItems();
+                updateDiagnostics(uri, items);
+                return items;
+            }
+            if (report != null && report.isRelatedUnchangedDocumentDiagnosticReport()) {
+                return diagnostics.getOrDefault(uri, List.of());
+            }
+        } catch (Exception e) {
+            LOG.debug("Failed to pull diagnostics", e);
+        }
+        return null;
+    }
+
     private List<org.eclipse.lsp4j.DocumentSymbol> mapDocumentSymbols(
         List<org.eclipse.lsp4j.jsonrpc.messages.Either<
             org.eclipse.lsp4j.SymbolInformation,
@@ -355,23 +443,9 @@ public final class BoxLangLspClientService {
         return symbols;
     }
 
-    private static final class CachedTokens {
-        private final long stamp;
-        private final SemanticTokens tokens;
-
-        private CachedTokens(long stamp, SemanticTokens tokens) {
-            this.stamp = stamp;
-            this.tokens = tokens;
-        }
+    private record CachedTokens(long stamp, SemanticTokens tokens) {
     }
 
-    private static final class CachedSymbols {
-        private final long stamp;
-        private final List<org.eclipse.lsp4j.DocumentSymbol> symbols;
-
-        private CachedSymbols(long stamp, List<org.eclipse.lsp4j.DocumentSymbol> symbols) {
-            this.stamp = stamp;
-            this.symbols = symbols;
-        }
+    private record CachedSymbols(long stamp, List<org.eclipse.lsp4j.DocumentSymbol> symbols) {
     }
 }
