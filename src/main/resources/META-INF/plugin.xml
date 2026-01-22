@@ -35,6 +35,12 @@
 
     <colorSettingsPage implementation="com.ortussolutions.intellijboxlang.highlighting.BoxLangColorSettingsPage" />
 
+    <projectConfigurable
+      id="boxlang.project.settings"
+      displayName="BoxLang"
+      groupId="language"
+      instance="com.ortussolutions.intellijboxlang.settings.BoxLangProjectConfigurable" />
+
   </extensions>
 
   <actions>
