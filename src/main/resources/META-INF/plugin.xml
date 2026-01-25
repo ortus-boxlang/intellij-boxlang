@@ -53,6 +53,9 @@
       groupId="language"
       instance="com.ortussolutions.intellijboxlang.settings.BoxLangProjectConfigurable" />
 
+    <!-- Run Configuration -->
+    <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangConfigurationType"/>
+
   </extensions>
 
   <actions>

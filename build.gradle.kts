@@ -27,6 +27,7 @@ dependencies {
 
   implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.22.0")
   implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.22.0")
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.debug:0.22.0")
   implementation("com.vdurmont:semver4j:3.1.0")
 }
 
