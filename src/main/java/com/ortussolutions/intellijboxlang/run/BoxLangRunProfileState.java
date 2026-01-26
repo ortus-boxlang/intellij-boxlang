@@ -13,8 +13,10 @@ import com.intellij.execution.process.ProcessTerminatedListener;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.runners.ProgramRunner;
 import com.intellij.execution.ui.ConsoleView;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.execution.ParametersListUtil;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
@@ -101,8 +103,12 @@ public class BoxLangRunProfileState extends CommandLineState {
         // Main class
         commandLine.addParameter("ortus.boxlang.runtime.BoxRunner");
 
-        // Script path
-        commandLine.addParameter(configuration.getScriptPath());
+        // Script path - use current file if configured
+        String scriptPath = resolveScriptPath(project);
+        if (scriptPath == null || scriptPath.isBlank()) {
+            throw new ExecutionException("No BoxLang script to run. Please open a BoxLang file or specify a script path.");
+        }
+        commandLine.addParameter(scriptPath);
 
         // Program arguments
         String programArgs = configuration.getProgramArguments();
@@ -138,5 +144,30 @@ public class BoxLangRunProfileState extends CommandLineState {
         }
         
         return args;
+    }
+
+    private String resolveScriptPath(Project project) {
+        // If not using current file, return the configured script path
+        if (!configuration.isUseCurrentFile()) {
+            return configuration.getScriptPath();
+        }
+        
+        // Get the currently open file in the editor
+        VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
+        if (selectedFiles.length == 0) {
+            return null;
+        }
+        
+        VirtualFile currentFile = selectedFiles[0];
+        
+        // Verify it's a BoxLang file
+        String ext = currentFile.getExtension();
+        if (ext == null || (!ext.equalsIgnoreCase("bx") 
+                && !ext.equalsIgnoreCase("bxm") 
+                && !ext.equalsIgnoreCase("bxs"))) {
+            return null;
+        }
+        
+        return currentFile.getPath();
     }
 }

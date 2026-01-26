@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.TextBrowseFolderListener;
 import com.intellij.openapi.ui.TextFieldWithBrowseButton;
 import com.intellij.ui.RawCommandLineEditor;
+import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.util.ui.FormBuilder;
 import org.jetbrains.annotations.NotNull;
@@ -19,7 +20,9 @@ import javax.swing.*;
 public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConfiguration> {
 
     private final JPanel panel;
+    private final JBCheckBox useCurrentFileCheckbox;
     private final TextFieldWithBrowseButton scriptPathField;
+    private final JBLabel scriptPathLabel;
     private final TextFieldWithBrowseButton workingDirectoryField;
     private final RawCommandLineEditor programArgumentsField;
     private final RawCommandLineEditor environmentVariablesField;
@@ -27,6 +30,10 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
     private final RawCommandLineEditor jvmArgsField;
 
     public BoxLangRunConfigurationEditor(Project project) {
+        useCurrentFileCheckbox = new JBCheckBox("Use current file");
+        useCurrentFileCheckbox.addActionListener(e -> updateScriptPathVisibility());
+        
+        scriptPathLabel = new JBLabel("Script path:");
         scriptPathField = new TextFieldWithBrowseButton();
         FileChooserDescriptor scriptDescriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
                 .withFileFilter(file -> {
@@ -61,7 +68,8 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
         jvmArgsField.setDialogCaption("JVM Arguments");
 
         panel = FormBuilder.createFormBuilder()
-                .addLabeledComponent(new JBLabel("Script path:"), scriptPathField, 1, false)
+                .addComponent(useCurrentFileCheckbox)
+                .addLabeledComponent(scriptPathLabel, scriptPathField, 1, false)
                 .addLabeledComponent(new JBLabel("Working directory:"), workingDirectoryField, 1, false)
                 .addLabeledComponent(new JBLabel("Program arguments:"), programArgumentsField, 1, false)
                 .addLabeledComponent(new JBLabel("Environment variables:"), environmentVariablesField, 1, false)
@@ -71,18 +79,27 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
                 .getPanel();
     }
 
+    private void updateScriptPathVisibility() {
+        boolean useCurrentFile = useCurrentFileCheckbox.isSelected();
+        scriptPathLabel.setVisible(!useCurrentFile);
+        scriptPathField.setVisible(!useCurrentFile);
+    }
+
     @Override
     protected void resetEditorFrom(@NotNull BoxLangRunConfiguration configuration) {
+        useCurrentFileCheckbox.setSelected(configuration.isUseCurrentFile());
         scriptPathField.setText(configuration.getScriptPath() != null ? configuration.getScriptPath() : "");
         workingDirectoryField.setText(configuration.getWorkingDirectory() != null ? configuration.getWorkingDirectory() : "");
         programArgumentsField.setText(configuration.getProgramArguments() != null ? configuration.getProgramArguments() : "");
         environmentVariablesField.setText(configuration.getEnvironmentVariables() != null ? configuration.getEnvironmentVariables() : "");
         boxLangHomeField.setText(configuration.getBoxLangHome() != null ? configuration.getBoxLangHome() : "");
         jvmArgsField.setText(configuration.getJvmArgs() != null ? configuration.getJvmArgs() : "");
+        updateScriptPathVisibility();
     }
 
     @Override
     protected void applyEditorTo(@NotNull BoxLangRunConfiguration configuration) {
+        configuration.setUseCurrentFile(useCurrentFileCheckbox.isSelected());
         configuration.setScriptPath(scriptPathField.getText());
         configuration.setWorkingDirectory(workingDirectoryField.getText());
         configuration.setProgramArguments(programArgumentsField.getText());

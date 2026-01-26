@@ -35,6 +35,14 @@ public class BoxLangRunConfiguration extends RunConfigurationBase<BoxLangRunConf
         getOptions().setScriptPath(path);
     }
 
+    public boolean isUseCurrentFile() {
+        return getOptions().isUseCurrentFile();
+    }
+
+    public void setUseCurrentFile(boolean use) {
+        getOptions().setUseCurrentFile(use);
+    }
+
     public String getWorkingDirectory() {
         return getOptions().getWorkingDirectory();
     }
@@ -82,6 +90,11 @@ public class BoxLangRunConfiguration extends RunConfigurationBase<BoxLangRunConf
 
     @Override
     public void checkConfiguration() throws RuntimeConfigurationException {
+        // If using current file, validation happens at runtime
+        if (isUseCurrentFile()) {
+            return;
+        }
+        
         String scriptPath = getScriptPath();
         if (scriptPath == null || scriptPath.isBlank()) {
             throw new RuntimeConfigurationError("Script path is not specified");

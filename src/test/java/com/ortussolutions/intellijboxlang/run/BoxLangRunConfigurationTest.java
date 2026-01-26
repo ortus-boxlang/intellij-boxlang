@@ -34,6 +34,8 @@ public class BoxLangRunConfigurationTest extends BasePlatformTestCase {
         BoxLangRunConfiguration config = (BoxLangRunConfiguration) type.getConfigurationFactories()[0]
                 .createTemplateConfiguration(getProject());
         
+        // By default, use current file should be enabled
+        assertTrue("useCurrentFile should default to true", config.isUseCurrentFile());
         assertEquals("", config.getScriptPath());
         assertEquals("", config.getWorkingDirectory());
         assertEquals("", config.getProgramArguments());
@@ -49,6 +51,7 @@ public class BoxLangRunConfigurationTest extends BasePlatformTestCase {
         BoxLangRunConfiguration config = (BoxLangRunConfiguration) type.getConfigurationFactories()[0]
                 .createTemplateConfiguration(getProject());
         
+        config.setUseCurrentFile(false);
         config.setScriptPath("/path/to/script.bx");
         config.setWorkingDirectory("/path/to/working");
         config.setProgramArguments("--arg1 value1");
@@ -56,6 +59,7 @@ public class BoxLangRunConfigurationTest extends BasePlatformTestCase {
         config.setBoxLangHome("/path/to/boxlang");
         config.setJvmArgs("-Xmx1g");
         
+        assertFalse(config.isUseCurrentFile());
         assertEquals("/path/to/script.bx", config.getScriptPath());
         assertEquals("/path/to/working", config.getWorkingDirectory());
         assertEquals("--arg1 value1", config.getProgramArguments());
@@ -64,16 +68,37 @@ public class BoxLangRunConfigurationTest extends BasePlatformTestCase {
         assertEquals("-Xmx1g", config.getJvmArgs());
     }
 
-    public void testConfigurationValidationEmptyScript() {
+    public void testConfigurationValidationPassesWithUseCurrentFile() {
         ConfigurationType type = ConfigurationTypeUtil.findConfigurationType(BoxLangConfigurationType.ID);
         assertNotNull(type);
         
         BoxLangRunConfiguration config = (BoxLangRunConfiguration) type.getConfigurationFactories()[0]
                 .createTemplateConfiguration(getProject());
         
+        // With useCurrentFile enabled, validation should pass even without a script path
+        config.setUseCurrentFile(true);
+        
         try {
             config.checkConfiguration();
-            fail("Should throw exception for empty script path");
+            // Should not throw - validation passes when using current file
+        } catch (Exception e) {
+            fail("Should not throw exception when useCurrentFile is enabled");
+        }
+    }
+
+    public void testConfigurationValidationEmptyScriptWithoutUseCurrentFile() {
+        ConfigurationType type = ConfigurationTypeUtil.findConfigurationType(BoxLangConfigurationType.ID);
+        assertNotNull(type);
+        
+        BoxLangRunConfiguration config = (BoxLangRunConfiguration) type.getConfigurationFactories()[0]
+                .createTemplateConfiguration(getProject());
+        
+        // Disable useCurrentFile - now we need a script path
+        config.setUseCurrentFile(false);
+        
+        try {
+            config.checkConfiguration();
+            fail("Should throw exception for empty script path when useCurrentFile is disabled");
         } catch (Exception e) {
             assertTrue(e.getMessage().contains("Script path"));
         }
@@ -86,6 +111,7 @@ public class BoxLangRunConfigurationTest extends BasePlatformTestCase {
         BoxLangRunConfiguration config = (BoxLangRunConfiguration) type.getConfigurationFactories()[0]
                 .createTemplateConfiguration(getProject());
         
+        config.setUseCurrentFile(false);
         config.setScriptPath("/non/existent/script.bx");
         
         try {

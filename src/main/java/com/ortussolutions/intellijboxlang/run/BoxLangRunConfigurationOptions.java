@@ -12,6 +12,9 @@ public class BoxLangRunConfigurationOptions extends RunConfigurationOptions {
     private final StoredProperty<String> scriptPath = string("")
             .provideDelegate(this, "scriptPath");
 
+    private final StoredProperty<Boolean> useCurrentFile = property(true)
+            .provideDelegate(this, "useCurrentFile");
+
     private final StoredProperty<String> workingDirectory = string("")
             .provideDelegate(this, "workingDirectory");
 
@@ -33,6 +36,14 @@ public class BoxLangRunConfigurationOptions extends RunConfigurationOptions {
 
     public void setScriptPath(String path) {
         scriptPath.setValue(this, path);
+    }
+
+    public boolean isUseCurrentFile() {
+        return useCurrentFile.getValue(this);
+    }
+
+    public void setUseCurrentFile(boolean use) {
+        useCurrentFile.setValue(this, use);
     }
 
     public String getWorkingDirectory() {
