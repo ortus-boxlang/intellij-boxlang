@@ -11,7 +11,10 @@ import org.eclipse.lsp4j.debug.SourceBreakpoint;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,10 +26,10 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
     private static final Logger LOG = Logger.getInstance(BoxLangBreakpointHandler.class);
 
     private final BoxLangDebugProcess debugProcess;
-    
+
     // Track breakpoints by file path for efficient updates
     private final Map<String, Set<XLineBreakpoint<BoxLangBreakpointProperties>>> breakpointsByFile = new ConcurrentHashMap<>();
-    
+
     // Track whether initial configuration is complete - before this, don't send breakpoints individually
     private volatile boolean configurationComplete = false;
 
@@ -45,17 +48,10 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
 
         VirtualFile file = position.getFile();
         String filePath = file.getPath();
-        
-        LOG.info("Registering breakpoint at " + filePath + ":" + (position.getLine() + 1));
-        
+
         breakpointsByFile.computeIfAbsent(filePath, k -> ConcurrentHashMap.newKeySet()).add(breakpoint);
-        
-        // Only send breakpoints immediately if initial configuration is complete
-        // During startup, breakpoints will be synced all at once via syncAllBreakpoints
         if (configurationComplete) {
-            sendBreakpointsToServer(filePath);
-        } else {
-            LOG.debug("Deferring breakpoint sync until configuration is complete");
+            pushBreakpoints(filePath);
         }
     }
 
@@ -68,7 +64,7 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
 
         VirtualFile file = position.getFile();
         String filePath = file.getPath();
-        
+
         Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
         if (fileBreakpoints != null) {
             fileBreakpoints.remove(breakpoint);
@@ -76,8 +72,8 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
                 breakpointsByFile.remove(filePath);
             }
         }
-        
-        sendBreakpointsToServer(filePath);
+
+        pushBreakpoints(filePath);
     }
 
     /**
@@ -85,7 +81,7 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
      * Reads condition, log expression from IntelliJ's built-in breakpoint UI fields
      * (XBreakpoint.getConditionExpression() and XBreakpoint.getLogExpressionObject()),
      * NOT from BoxLangBreakpointProperties which are never populated by the UI.
-     * 
+     *
      * @return The SourceBreakpoint, or null if the breakpoint is disabled or has no position.
      */
     @Nullable
@@ -154,37 +150,15 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
         return collectDapBreakpoints(breakpointsByFile.get(filePath));
     }
 
-    /**
-     * Logs the breakpoints about to be sent.
-     */
-    private void logBreakpoints(@NotNull String filePath, @NotNull List<SourceBreakpoint> dapBreakpoints) {
-        LOG.info("Sending " + dapBreakpoints.size() + " breakpoints for file: " + filePath);
-        for (SourceBreakpoint sbp : dapBreakpoints) {
-            StringBuilder info = new StringBuilder("  Line " + sbp.getLine());
-            if (sbp.getCondition() != null) {
-                info.append(" [condition: ").append(sbp.getCondition()).append("]");
-            }
-            if (sbp.getLogMessage() != null) {
-                info.append(" [log: ").append(sbp.getLogMessage()).append("]");
-            }
-            LOG.info(info.toString());
-        }
-    }
-
-    /**
-     * Sends all breakpoints for a given file to the DAP server.
-     */
-    private void sendBreakpointsToServer(@NotNull String filePath) {
+    private CompletableFuture<Void> pushBreakpoints(@NotNull String filePath) {
         BoxLangDapService dapService = debugProcess.getDapService();
-        if (dapService == null || !dapService.isConfigurationReady()) {
-            LOG.debug("DAP service not ready for configuration, deferring breakpoint sync for: " + filePath);
-            return;
+        if (!dapService.isConfigurationReady()) {
+            return CompletableFuture.completedFuture(null);
         }
 
         List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints(breakpointsByFile.get(filePath));
-        logBreakpoints(filePath, dapBreakpoints);
-        
-        dapService.setBreakpoints(filePath, dapBreakpoints)
+        LOG.debug("Syncing " + dapBreakpoints.size() + " breakpoints for " + filePath);
+        return dapService.setBreakpoints(filePath, dapBreakpoints)
             .thenAccept(response -> handleSetBreakpointsResponse(filePath, response))
             .exceptionally(ex -> {
                 LOG.warn("Failed to set breakpoints for " + filePath, ex);
@@ -203,25 +177,19 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
         }
 
         org.eclipse.lsp4j.debug.Breakpoint[] verifiedBreakpoints = response.getBreakpoints();
-        LOG.info("SetBreakpoints response for " + filePath + ": " + verifiedBreakpoints.length + " breakpoints");
-        
         Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
-        
         if (fileBreakpoints == null) {
             return;
         }
 
         // Match verified breakpoints back to IntelliJ breakpoints by line number
         for (org.eclipse.lsp4j.debug.Breakpoint verified : verifiedBreakpoints) {
-            LOG.info("  Breakpoint line " + verified.getLine() + ": verified=" + verified.isVerified() + 
-                (verified.getMessage() != null ? ", message=" + verified.getMessage() : ""));
-            
             if (verified.getLine() == null) {
                 continue;
             }
-            
+
             int verifiedLine = verified.getLine() - 1; // Convert back to 0-based
-            
+
             for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
                 XSourcePosition pos = bp.getSourcePosition();
                 if (pos != null && pos.getLine() == verifiedLine) {
@@ -237,9 +205,6 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
                             message = "Breakpoint could not be verified";
                         }
                         debugProcess.getSession().setBreakpointInvalid(bp, message);
-                    } else {
-                        LOG.info("  Breakpoint at line " + verified.getLine() + 
-                            " not yet verified (pre-launch) - will be verified when class loads");
                     }
                     break;
                 }
@@ -253,55 +218,16 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
      * @return A CompletableFuture that completes when all breakpoints have been synced.
      */
     public CompletableFuture<Void> syncAllBreakpoints() {
-        LOG.info("Syncing all breakpoints to DAP server (" + breakpointsByFile.size() + " files)");
-        BoxLangDapService dapService = debugProcess.getDapService();
-        LOG.info("  dapService=" + (dapService != null ? "present" : "null") + 
-                 ", isConnected=" + (dapService != null && dapService.isConnected()) +
-                 ", isConfigurationReady=" + (dapService != null && dapService.isConfigurationReady()));
-        
         if (breakpointsByFile.isEmpty()) {
-            LOG.info("No breakpoints to sync");
             return CompletableFuture.completedFuture(null);
-        }
-        
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        for (String filePath : breakpointsByFile.keySet()) {
-            Set<XLineBreakpoint<BoxLangBreakpointProperties>> bps = breakpointsByFile.get(filePath);
-            LOG.info("  File: " + filePath + " - " + (bps != null ? bps.size() : 0) + " breakpoints");
-            CompletableFuture<Void> future = sendBreakpointsToServerAsync(filePath);
-            if (future != null) {
-                futures.add(future);
-            }
-        }
-        
-        if (futures.isEmpty()) {
-            return CompletableFuture.completedFuture(null);
-        }
-        
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-    }
-    
-    /**
-     * Sends all breakpoints for a given file to the DAP server asynchronously.
-     * @return A CompletableFuture that completes when the breakpoints are sent, or null if not sent.
-     */
-    private CompletableFuture<Void> sendBreakpointsToServerAsync(@NotNull String filePath) {
-        BoxLangDapService dapService = debugProcess.getDapService();
-        if (dapService == null || !dapService.isConfigurationReady()) {
-            LOG.debug("DAP service not ready for configuration, cannot sync breakpoints for: " + filePath);
-            return null;
         }
 
-        List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints(breakpointsByFile.get(filePath));
-        logBreakpoints(filePath, dapBreakpoints);
-        
-        return dapService.setBreakpoints(filePath, dapBreakpoints)
-            .thenAccept(response -> handleSetBreakpointsResponse(filePath, response))
-            .exceptionally(ex -> {
-                LOG.warn("Failed to set breakpoints for " + filePath, ex);
-                return null;
-            });
+        List<CompletableFuture<Void>> futures = new ArrayList<>();
+        for (String filePath : breakpointsByFile.keySet()) {
+            futures.add(pushBreakpoints(filePath));
+        }
+
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
     }
 
     /**
@@ -310,13 +236,12 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
     public void clear() {
         breakpointsByFile.clear();
     }
-    
+
     /**
      * Marks configuration as complete. After this, breakpoints will be sent immediately
      * when registered/unregistered instead of being deferred.
      */
     public void markConfigurationComplete() {
-        LOG.info("Marking configuration complete - future breakpoint changes will be sent immediately");
         configurationComplete = true;
     }
 }

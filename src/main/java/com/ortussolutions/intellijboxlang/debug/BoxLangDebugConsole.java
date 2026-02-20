@@ -6,7 +6,6 @@ import com.intellij.execution.console.LanguageConsoleImpl;
 import com.intellij.execution.console.LanguageConsoleView;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ConsoleViewContentType;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.ortussolutions.intellijboxlang.BoxLangLanguage;
 import org.jetbrains.annotations.NotNull;
@@ -26,8 +25,6 @@ import org.jetbrains.annotations.NotNull;
  * with the {@code "repl"} context, scoped to the current top stack frame.
  */
 public class BoxLangDebugConsole {
-    private static final Logger LOG = Logger.getInstance(BoxLangDebugConsole.class);
-
     private final LanguageConsoleView consoleView;
     private final BoxLangDebugProcess debugProcess;
 
@@ -73,10 +70,8 @@ public class BoxLangDebugConsole {
 
         @Override
         protected void execute(@NotNull String text, @NotNull LanguageConsoleView console) {
-            LOG.debug("Console REPL evaluate: " + text);
-
             BoxLangDapService dapService = debugProcess.getDapService();
-            if (dapService == null || !dapService.isConnected()) {
+            if (!dapService.isConnected()) {
                 console.print("Error: Debug session is not connected\n",
                         ConsoleViewContentType.ERROR_OUTPUT);
                 return;

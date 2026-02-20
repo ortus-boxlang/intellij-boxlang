@@ -3,16 +3,13 @@ package com.ortussolutions.intellijboxlang.debug;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.xdebugger.frame.*;
 import org.eclipse.lsp4j.debug.Variable;
-import org.eclipse.lsp4j.debug.VariablesResponse;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
 
 /**
  * Represents a named variable value in the debugger's Variables panel.
  * Maps DAP Variable data to IntelliJ's XNamedValue interface.
- * 
+ *
  * Supports:
  * - Displaying variable name, value, and type
  * - Expanding composite values (structs, arrays, objects) via child variable references
@@ -54,7 +51,7 @@ public class BoxLangNamedValue extends XNamedValue {
         }
 
         BoxLangDapService dapService = debugProcess.getDapService();
-        if (dapService == null || !dapService.isConnected()) {
+        if (!dapService.isConnected()) {
             node.addChildren(XValueChildrenList.EMPTY, true);
             return;
         }

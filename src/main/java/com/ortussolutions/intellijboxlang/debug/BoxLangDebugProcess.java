@@ -4,6 +4,7 @@ import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugSession;
@@ -17,6 +18,8 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 /**
  * The main debug process for BoxLang debugging.
@@ -29,61 +32,95 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     private final BoxLangBreakpointHandler breakpointHandler;
     private final BoxLangDebuggerEditorsProvider editorsProvider;
     private final BoxLangDapProcessHandler processHandler;
-    
+
     // Launch parameters - stored so we can send launch request at the right time
     private final String scriptPath;
     private final String workingDirectory;
     private final List<String> programArgs;
-    
+
+    // Attach mode parameters
+    private final boolean attachMode;
+    private final int attachPort;
+    private final String localRoot;
+    private final String remoteRoot;
+
     // Track the current thread ID for stepping operations
     private volatile int activeThreadId = -1;
-    
+
     // Track the top frame ID of the current suspension, used for REPL evaluation
     private volatile int activeFrameId = -1;
-    
+
     // Track whether we've received the 'initialized' event from DAP
     private volatile boolean dapInitialized = false;
-    
+
     // Track whether IntelliJ has finished registering breakpoints (sessionInitialized called)
     private volatile boolean sessionReady = false;
-    
+
     // Track whether we've already completed configuration (prevent double calls)
     private volatile boolean configurationCompleted = false;
-    
-    // Track run-to-cursor state: the file path and line where we set the temporary breakpoint
-    private volatile String runToCursorFilePath = null;
-    private volatile int runToCursorLine = -1; // 1-based DAP line number
 
+    // Track run-to-cursor state: the file path where we set the temporary breakpoint
+    private volatile String runToCursorFilePath = null;
+
+    /**
+     * Creates a debug process in launch mode (runs a BoxLang script).
+     */
     public BoxLangDebugProcess(@NotNull XDebugSession session,
                                 @NotNull BoxLangDapService dapService,
                                 @NotNull String scriptPath,
                                 @Nullable String workingDirectory,
                                 @Nullable List<String> programArgs) {
+        this(session, dapService, scriptPath, workingDirectory, programArgs,
+             false, 0, null, null);
+    }
+
+    /**
+     * Creates a debug process in attach mode (connects to an already-running process).
+     */
+    public static BoxLangDebugProcess createAttachProcess(@NotNull XDebugSession session,
+                                                           @NotNull BoxLangDapService dapService,
+                                                           int attachPort,
+                                                           @Nullable String localRoot,
+                                                           @Nullable String remoteRoot) {
+        return new BoxLangDebugProcess(session, dapService, null, null, null,
+                true, attachPort, localRoot, remoteRoot);
+    }
+
+    private BoxLangDebugProcess(@NotNull XDebugSession session,
+                                 @NotNull BoxLangDapService dapService,
+                                 @Nullable String scriptPath,
+                                 @Nullable String workingDirectory,
+                                 @Nullable List<String> programArgs,
+                                 boolean attachMode,
+                                 int attachPort,
+                                 @Nullable String localRoot,
+                                 @Nullable String remoteRoot) {
         super(session);
         this.dapService = dapService;
         this.scriptPath = scriptPath;
         this.workingDirectory = workingDirectory;
         this.programArgs = programArgs;
+        this.attachMode = attachMode;
+        this.attachPort = attachPort;
+        this.localRoot = localRoot;
+        this.remoteRoot = remoteRoot;
         this.breakpointHandler = new BoxLangBreakpointHandler(this);
         this.editorsProvider = new BoxLangDebuggerEditorsProvider();
-        
+
         // Create a custom ProcessHandler that stays alive until DAP terminated/exited events.
         // This is the key fix: previously we used the ProcessHandler from profileState.execute()
         // which would terminate when the normal (non-debugged) BoxLang process finished,
         // causing IntelliJ to tear down the debug session prematurely.
         this.processHandler = new BoxLangDapProcessHandler();
         this.processHandler.startNotified();
-        
+
         // Register for DAP events
         dapService.addEventListener(this);
-        
+
         // Check if the 'initialized' event was already received before we registered
         // This can happen because dapService.start() sends initialize and may receive
         // the initialized event before BoxLangDebugProcess is created
-        if (dapService.isConfigurationReady()) {
-            LOG.info("DAP server was already initialized before we registered - setting dapInitialized flag");
-            dapInitialized = true;
-        }
+        dapInitialized = dapService.isConfigurationReady();
     }
 
     @Override
@@ -120,65 +157,45 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     /**
      * Called when the debug session is fully started and IntelliJ has registered all breakpoints.
      * This is the signal that we can complete the DAP configuration sequence.
-     * 
+     *
      * IMPORTANT: This method is called automatically by IntelliJ AFTER all initial breakpoints
      * have been registered via registerBreakpoint() on our XBreakpointHandler. Do NOT call this
      * method manually from outside.
      */
     @Override
     public void sessionInitialized() {
-        LOG.info("Debug session initialized - IntelliJ has registered all breakpoints");
-        LOG.info("  dapInitialized=" + dapInitialized + ", sessionReady=" + sessionReady + ", configurationCompleted=" + configurationCompleted);
         sessionReady = true;
-        
-        // If DAP is already initialized, complete the configuration now
-        // Otherwise, onInitialized will do it when the DAP server is ready
         if (dapInitialized) {
-            LOG.info("DAP already initialized, calling completeConfiguration()");
             completeConfiguration();
-        } else {
-            LOG.info("Waiting for DAP 'initialized' event before completing configuration");
         }
     }
-    
+
     /**
-     * Complete the DAP configuration by syncing breakpoints, launching, and sending configurationDone.
+     * Complete the DAP configuration by syncing breakpoints, launching/attaching, and sending configurationDone.
      * This should only be called when BOTH the DAP server is initialized AND IntelliJ has
      * finished registering breakpoints.
-     * 
+     *
      * The correct DAP message order is:
      * 1. setBreakpoints (for all files)
-     * 2. launch
+     * 2. launch or attach
      * 3. configurationDone
      */
     private synchronized void completeConfiguration() {
-        // Guard against being called multiple times
         if (configurationCompleted) {
-            LOG.debug("Configuration already completed, skipping duplicate call");
             return;
         }
         configurationCompleted = true;
-        
-        LOG.info("Completing DAP configuration - correct order: breakpoints -> launch -> configurationDone");
-        LOG.info("  scriptPath=" + scriptPath + ", workingDirectory=" + workingDirectory);
-        
-        // Step 1: Sync all breakpoints to the DAP server FIRST
+
         breakpointHandler.syncAllBreakpoints()
             .thenCompose(v -> {
-                // Step 2: Send launch request AFTER breakpoints are set
-                LOG.info("All breakpoints synced, sending launch request for: " + scriptPath);
-                return dapService.launch(scriptPath, workingDirectory, programArgs, false);
+                if (attachMode) {
+                    return dapService.attach(attachPort, localRoot, remoteRoot);
+                } else {
+                    return dapService.launch(scriptPath, workingDirectory, programArgs, false);
+                }
             })
-            .thenCompose(v -> {
-                // Step 3: Send configurationDone AFTER launch
-                LOG.info("Launch request completed, sending configurationDone");
-                return dapService.configurationDone();
-            })
-            .thenRun(() -> {
-                LOG.info("configurationDone sent successfully - debug session fully configured");
-                // Mark configuration as complete so future breakpoint changes are sent immediately
-                breakpointHandler.markConfigurationComplete();
-            })
+            .thenCompose(v -> dapService.configurationDone())
+            .thenRun(breakpointHandler::markConfigurationComplete)
             .exceptionally(ex -> {
                 LOG.error("Failed to complete DAP configuration", ex);
                 return null;
@@ -189,68 +206,42 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public void startStepOver(@Nullable XSuspendContext context) {
-        int threadId = getThreadId(context);
-        if (threadId != -1) {
-            dapService.stepOver(threadId)
-                .exceptionally(ex -> {
-                    LOG.warn("Step over failed", ex);
-                    return null;
-                });
-        }
+        performThreadAction(context, dapService::stepOver, "Step over");
     }
 
     @Override
     public void startStepInto(@Nullable XSuspendContext context) {
-        int threadId = getThreadId(context);
-        if (threadId != -1) {
-            dapService.stepInto(threadId)
-                .exceptionally(ex -> {
-                    LOG.warn("Step into failed", ex);
-                    return null;
-                });
-        }
+        performThreadAction(context, dapService::stepInto, "Step into");
     }
 
     @Override
     public void startStepOut(@Nullable XSuspendContext context) {
-        int threadId = getThreadId(context);
-        if (threadId != -1) {
-            dapService.stepOut(threadId)
-                .exceptionally(ex -> {
-                    LOG.warn("Step out failed", ex);
-                    return null;
-                });
-        }
+        performThreadAction(context, dapService::stepOut, "Step out");
     }
 
     @Override
     public void resume(@Nullable XSuspendContext context) {
-        int threadId = getThreadId(context);
-        if (threadId != -1) {
-            dapService.continueExecution(threadId)
-                .exceptionally(ex -> {
-                    LOG.warn("Resume failed", ex);
-                    return null;
-                });
-        }
+        performThreadAction(context, dapService::continueExecution, "Resume");
     }
 
     @Override
     public void startPausing() {
-        if (activeThreadId != -1) {
-            dapService.pause(activeThreadId)
-                .exceptionally(ex -> {
-                    LOG.warn("Pause failed", ex);
-                    return null;
-                });
-        }
+        performThreadAction(activeThreadId, dapService::pause, "Pause");
     }
 
     @Override
     public void stop() {
-        LOG.info("Stopping debug process");
         breakpointHandler.clear();
         dapService.removeEventListener(this);
+        // In attach mode, don't terminate the debuggee — let the target process keep running.
+        // In launch mode, the default dispose() behavior terminates the debuggee.
+        if (attachMode) {
+            try {
+                dapService.disconnect(false).get(5, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                LOG.debug("Error during attach mode disconnect", e);
+            }
+        }
         dapService.dispose();
     }
 
@@ -259,40 +250,27 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
         VirtualFile file = position.getFile();
         String filePath = file.getPath();
         int dapLine = position.getLine() + 1; // Convert 0-based to 1-based
-        
-        LOG.info("Run to cursor: " + filePath + ":" + dapLine);
-        
-        // Build the list of breakpoints for this file: existing user breakpoints + temporary one
+
         List<SourceBreakpoint> allBreakpoints = new ArrayList<>();
-        
-        // Include existing user breakpoints for this file so they aren't lost
-        // (DAP setBreakpoints is a full replacement for the file)
         allBreakpoints.addAll(breakpointHandler.collectDapBreakpointsForFile(filePath));
-        
-        // Add the temporary run-to-cursor breakpoint
+
         SourceBreakpoint tempBreakpoint = new SourceBreakpoint();
         tempBreakpoint.setLine(dapLine);
         allBreakpoints.add(tempBreakpoint);
-        
-        // Track the run-to-cursor target so onStopped can clean it up
+
         runToCursorFilePath = filePath;
-        runToCursorLine = dapLine;
-        
-        // Send all breakpoints (existing + temporary) and then resume
+
         dapService.setBreakpoints(filePath, allBreakpoints)
             .thenCompose(response -> {
-                LOG.info("Run to cursor: temporary breakpoint set, resuming execution");
                 int threadId = getThreadId(context);
                 if (threadId != -1) {
                     return dapService.continueExecution(threadId).thenApply(r -> null);
                 }
-                return java.util.concurrent.CompletableFuture.<Void>completedFuture(null);
+                return CompletableFuture.completedFuture(null);
             })
             .exceptionally(ex -> {
                 LOG.warn("Run to cursor failed", ex);
-                // Clean up run-to-cursor state on failure
                 runToCursorFilePath = null;
-                runToCursorLine = -1;
                 return null;
             });
     }
@@ -301,36 +279,17 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public void onInitialized() {
-        LOG.info("DAP server initialized event received");
-        LOG.info("  dapInitialized=" + dapInitialized + ", sessionReady=" + sessionReady + ", configurationCompleted=" + configurationCompleted);
         dapInitialized = true;
-        
-        // If IntelliJ has already registered breakpoints (sessionInitialized called),
-        // complete the configuration now. Otherwise, sessionInitialized will do it.
         if (sessionReady) {
-            LOG.info("IntelliJ session already ready, calling completeConfiguration()");
             completeConfiguration();
-        } else {
-            LOG.info("Waiting for IntelliJ to finish registering breakpoints before completing configuration");
         }
     }
 
     @Override
     public void onStopped(StoppedEventArguments args) {
-        LOG.info("Execution stopped: " + args.getReason() + " on thread " + args.getThreadId());
-        
-        int threadId = args.getThreadId() != null ? args.getThreadId() : 1;
-        activeThreadId = threadId;
-        
-        // Check if this stop is from a run-to-cursor temporary breakpoint.
-        // If so, clean up by restoring the original breakpoints for the file.
         if (runToCursorFilePath != null) {
             String rtcFilePath = runToCursorFilePath;
             runToCursorFilePath = null;
-            runToCursorLine = -1;
-            
-            LOG.info("Cleaning up run-to-cursor temporary breakpoint for: " + rtcFilePath);
-            // Restore original breakpoints (without the temporary one) by re-syncing
             List<SourceBreakpoint> originalBreakpoints = breakpointHandler.collectDapBreakpointsForFile(rtcFilePath);
             dapService.setBreakpoints(rtcFilePath, originalBreakpoints)
                 .exceptionally(ex -> {
@@ -338,89 +297,40 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
                     return null;
                 });
         }
-        
-        // Fetch stack trace from DAP server before creating the suspend context.
-        // This ensures IntelliJ has real stack frames to display in the Frames panel
-        // and can highlight the correct source line.
-        dapService.stackTrace(threadId)
-            .thenAccept(stackTraceResponse -> {
-                org.eclipse.lsp4j.debug.StackFrame[] frames = stackTraceResponse.getStackFrames();
-                if (frames == null) {
-                    frames = new org.eclipse.lsp4j.debug.StackFrame[0];
-                }
-                
-                LOG.info("Stack trace received: " + frames.length + " frames for thread " + threadId);
-                for (org.eclipse.lsp4j.debug.StackFrame frame : frames) {
-                    LOG.debug("  Frame: " + frame.getName() + " at " + 
-                        (frame.getSource() != null ? frame.getSource().getPath() : "<no source>") + 
-                        ":" + frame.getLine());
-                }
-                
-                // Track the top frame ID for REPL evaluation
-                if (frames.length > 0) {
-                    activeFrameId = frames[0].getId();
-                }
-                
-                // Build a thread name for display
-                String threadName = "Thread " + threadId;
-                
+
+        fetchPausedThreadFrames(args)
+            .thenAccept(threadFrames -> {
+                activeThreadId = threadFrames.threadId();
+                activeFrameId = resolveActiveFrameId(threadFrames.frames());
                 BoxLangSuspendContext suspendContext = new BoxLangSuspendContext(
-                    this, args, threadName, frames);
-                
-                // positionReached must be called on the EDT for IntelliJ to properly
-                // activate the debug toolbar (step over/into/out, resume buttons)
-                ApplicationManager.getApplication().invokeLater(() -> {
-                    getSession().positionReached(suspendContext);
-                });
+                    this, args, "Thread " + threadFrames.threadId(), threadFrames.frames());
+                notifyPositionReached(suspendContext);
             })
             .exceptionally(ex -> {
-                LOG.warn("Failed to fetch stack trace for thread " + threadId + ", creating empty suspend context", ex);
-                // Fall back to an empty stack trace so the session still pauses
+                int fallbackThreadId = args.getThreadId() != null ? args.getThreadId() : 1;
+                activeThreadId = fallbackThreadId;
+                activeFrameId = -1;
                 BoxLangSuspendContext suspendContext = new BoxLangSuspendContext(
-                    this, args, "Thread " + threadId, new org.eclipse.lsp4j.debug.StackFrame[0]);
-                ApplicationManager.getApplication().invokeLater(() -> {
-                    getSession().positionReached(suspendContext);
-                });
+                    this, args, "Thread " + fallbackThreadId, new org.eclipse.lsp4j.debug.StackFrame[0]);
+                notifyPositionReached(suspendContext);
                 return null;
             });
     }
 
     @Override
-    public void onContinued(ContinuedEventArguments args) {
-        LOG.debug("Execution continued on thread " + args.getThreadId());
-    }
-
-    @Override
     public void onExited(ExitedEventArguments args) {
-        LOG.info("Process exited with code: " + args.getExitCode());
         processHandler.onDapExited(args.getExitCode());
     }
 
     @Override
     public void onTerminated(TerminatedEventArguments args) {
-        LOG.info("Debug session terminated");
         processHandler.onDapTerminated();
         getSession().stop();
     }
 
     @Override
-    public void onThread(ThreadEventArguments args) {
-        LOG.debug("Thread event: " + args.getReason() + " for thread " + args.getThreadId());
-    }
-
-    @Override
     public void onOutput(OutputEventArguments args) {
-        String output = args.getOutput();
-        String category = args.getCategory();
-        LOG.debug("Output [" + category + "]: " + output);
-        
-        // Forward output to the console via the ProcessHandler
-        processHandler.onDapOutput(output, category);
-    }
-
-    @Override
-    public void onBreakpoint(BreakpointEventArguments args) {
-        LOG.debug("Breakpoint event: " + args.getReason());
+        processHandler.onDapOutput(args.getOutput(), args.getCategory());
     }
 
     // Helper methods
@@ -433,10 +343,148 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
         return activeFrameId;
     }
 
+    public @Nullable String mapRemotePathToLocal(@Nullable String sourcePath) {
+        if (sourcePath == null || sourcePath.isBlank()) {
+            return sourcePath;
+        }
+
+        String normalizedSourcePath = FileUtil.toSystemIndependentName(sourcePath);
+        if (localRoot == null || localRoot.isBlank() || remoteRoot == null || remoteRoot.isBlank()) {
+            return normalizedSourcePath;
+        }
+
+        String normalizedLocalRoot = FileUtil.toSystemIndependentName(localRoot);
+        String normalizedRemoteRoot = FileUtil.toSystemIndependentName(remoteRoot);
+        if (!normalizedSourcePath.startsWith(normalizedRemoteRoot)) {
+            return normalizedSourcePath;
+        }
+
+        String suffix = normalizedSourcePath.substring(normalizedRemoteRoot.length());
+        if (!suffix.isEmpty() && !suffix.startsWith("/")) {
+            suffix = "/" + suffix;
+        }
+        return normalizedLocalRoot + suffix;
+    }
+
     private int getThreadId(@Nullable XSuspendContext context) {
         if (context instanceof BoxLangSuspendContext) {
             return ((BoxLangSuspendContext) context).getThreadId();
         }
         return activeThreadId;
+    }
+
+    private void notifyPositionReached(@NotNull BoxLangSuspendContext suspendContext) {
+        ApplicationManager.getApplication().invokeLater(() -> getSession().positionReached(suspendContext));
+    }
+
+    private int resolveActiveFrameId(@NotNull org.eclipse.lsp4j.debug.StackFrame[] frames) {
+        if (frames.length == 0) {
+            return -1;
+        }
+
+        for (org.eclipse.lsp4j.debug.StackFrame frame : frames) {
+            Source source = frame.getSource();
+            if (source != null && source.getPath() != null && !source.getPath().isBlank()) {
+                return frame.getId();
+            }
+        }
+
+        return frames[0].getId();
+    }
+
+    private CompletableFuture<ThreadFrames> fetchPausedThreadFrames(@NotNull StoppedEventArguments args) {
+        Integer stoppedThreadId = args.getThreadId();
+        if (stoppedThreadId != null && stoppedThreadId > 0) {
+            return dapService.stackTrace(stoppedThreadId)
+                .handle((response, error) -> {
+                    if (error != null) {
+                        LOG.warn("Failed to fetch stack trace for stopped thread " + stoppedThreadId, error);
+                        return new ThreadFrames(stoppedThreadId, new org.eclipse.lsp4j.debug.StackFrame[0]);
+                    }
+                    return new ThreadFrames(stoppedThreadId, stackFrames(response));
+                })
+                .thenCompose(threadFrames -> {
+                    if (threadFrames.frames().length > 0 || !Boolean.TRUE.equals(args.getAllThreadsStopped())) {
+                        return CompletableFuture.completedFuture(threadFrames);
+                    }
+                    return fetchFirstNonEmptyThreadFrames(stoppedThreadId);
+                });
+        }
+
+        return fetchFirstNonEmptyThreadFrames(1);
+    }
+
+    private CompletableFuture<ThreadFrames> fetchFirstNonEmptyThreadFrames(int fallbackThreadId) {
+        return dapService.threads()
+            .handle((threadsResponse, error) -> {
+                if (error != null || threadsResponse == null || threadsResponse.getThreads() == null) {
+                    if (error != null) {
+                        LOG.warn("Failed to fetch thread list while resolving paused frame", error);
+                    }
+                    return List.<Integer>of();
+                }
+
+                List<Integer> threadIds = new ArrayList<>();
+                for (org.eclipse.lsp4j.debug.Thread thread : threadsResponse.getThreads()) {
+                    if (thread.getId() > 0) {
+                        threadIds.add(thread.getId());
+                    }
+                }
+                return threadIds;
+            })
+            .thenCompose(threadIds -> tryThreadStackTraces(threadIds, 0, fallbackThreadId));
+    }
+
+    private CompletableFuture<ThreadFrames> tryThreadStackTraces(@NotNull List<Integer> threadIds,
+                                                                 int index,
+                                                                 int fallbackThreadId) {
+        if (index >= threadIds.size()) {
+            return CompletableFuture.completedFuture(
+                    new ThreadFrames(fallbackThreadId, new org.eclipse.lsp4j.debug.StackFrame[0]));
+        }
+
+        int threadId = threadIds.get(index);
+        return dapService.stackTrace(threadId)
+            .handle((response, error) -> {
+                if (error != null) {
+                    return new org.eclipse.lsp4j.debug.StackFrame[0];
+                }
+                return stackFrames(response);
+            })
+            .thenCompose(frames -> {
+                if (frames.length > 0) {
+                    return CompletableFuture.completedFuture(new ThreadFrames(threadId, frames));
+                }
+                return tryThreadStackTraces(threadIds, index + 1, fallbackThreadId);
+            });
+    }
+
+    private org.eclipse.lsp4j.debug.StackFrame[] stackFrames(@Nullable StackTraceResponse response) {
+        if (response == null || response.getStackFrames() == null) {
+            return new org.eclipse.lsp4j.debug.StackFrame[0];
+        }
+        return response.getStackFrames();
+    }
+
+    private void performThreadAction(int threadId,
+                                     @NotNull Function<Integer, CompletableFuture<?>> action,
+                                     @NotNull String actionName) {
+        if (threadId == -1) {
+            return;
+        }
+        action.apply(threadId)
+            .exceptionally(ex -> {
+                LOG.warn(actionName + " failed", ex);
+                return null;
+            });
+    }
+
+    private void performThreadAction(@Nullable XSuspendContext context,
+                                     @NotNull Function<Integer, CompletableFuture<?>> action,
+                                     @NotNull String actionName) {
+        performThreadAction(getThreadId(context), action, actionName);
+    }
+
+    private record ThreadFrames(int threadId, org.eclipse.lsp4j.debug.StackFrame[] frames) {
     }
 }

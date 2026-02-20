@@ -8,7 +8,6 @@ import com.intellij.execution.executors.DefaultDebugExecutor;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.execution.runners.GenericProgramRunner;
 import com.intellij.execution.ui.RunContentDescriptor;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -29,7 +28,6 @@ import java.util.List;
  * Starts the DAP server and creates a debug session.
  */
 public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
-    private static final Logger LOG = Logger.getInstance(BoxLangDebugRunner.class);
     private static final String RUNNER_ID = "BoxLangDebugRunner";
 
     @Override
@@ -39,7 +37,7 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
 
     @Override
     public boolean canRun(@NotNull String executorId, @NotNull RunProfile profile) {
-        return DefaultDebugExecutor.EXECUTOR_ID.equals(executorId) 
+        return DefaultDebugExecutor.EXECUTOR_ID.equals(executorId)
                 && profile instanceof BoxLangRunConfiguration;
     }
 
@@ -77,14 +75,18 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
         final List<String> finalProgramArgs = programArgs;
 
         try {
-            // Create and start the debug session
             XDebugSession debugSession = XDebuggerManager.getInstance(project).startSession(
                     environment,
                     new XDebugProcessStarter() {
                         @Override
                         public @NotNull XDebugProcess start(@NotNull XDebugSession session) throws ExecutionException {
-                            return createDebugProcess(session, environment, 
-                                    finalScriptPath, finalWorkingDirectory, finalProgramArgs);
+                            return createDebugProcess(
+                                    session,
+                                    environment,
+                                    finalScriptPath,
+                                    finalWorkingDirectory,
+                                    finalProgramArgs
+                            );
                         }
                     }
             );
@@ -101,34 +103,14 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
                                                     @Nullable String workingDirectory,
                                                     @Nullable List<String> programArgs) throws ExecutionException {
         Project project = environment.getProject();
-        
+
         // Create DAP service for this debug session
         BoxLangDapService dapService = new BoxLangDapService(project);
-        
+
         try {
-            // Start the DAP server
-            LOG.info("Starting DAP server for debugging: " + scriptPath);
             dapService.start();
-            
-            // IMPORTANT: We do NOT launch a normal BoxLang process here!
-            // Previously, we called profileState.execute() which launched a non-debugged
-            // BoxLang process and used its ProcessHandler. When that process finished quickly
-            // (e.g., a simple script), IntelliJ would see the ProcessHandler terminate and
-            // tear down the entire debug session - killing the bx-debugger's JDI-launched VM
-            // before breakpoints could be hit.
-            //
-            // Instead, the bx-debugger handles launching the BoxLang VM via JDI (Java Debug
-            // Interface) when it receives the DAP "launch" request. We use a custom
-            // BoxLangDapProcessHandler that stays alive until DAP terminated/exited events
-            // are received, keeping the debug session alive for the entire debugging lifecycle.
-            
-            // Create the debug process with DAP-controlled lifecycle
-            BoxLangDebugProcess debugProcess = new BoxLangDebugProcess(
-                session, dapService,
-                scriptPath, workingDirectory, programArgs);
-            
-            return debugProcess;
-            
+            return new BoxLangDebugProcess(session, dapService, scriptPath, workingDirectory, programArgs);
+
         } catch (Exception e) {
             dapService.dispose();
             throw new ExecutionException("Failed to start DAP server: " + e.getMessage(), e);
@@ -140,23 +122,23 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
         if (!configuration.isUseCurrentFile()) {
             return configuration.getScriptPath();
         }
-        
+
         // Get the currently open file in the editor
         VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
         if (selectedFiles.length == 0) {
             return null;
         }
-        
+
         VirtualFile currentFile = selectedFiles[0];
-        
+
         // Verify it's a BoxLang file
         String ext = currentFile.getExtension();
-        if (ext == null || (!ext.equalsIgnoreCase("bx") 
-                && !ext.equalsIgnoreCase("bxm") 
+        if (ext == null || (!ext.equalsIgnoreCase("bx")
+                && !ext.equalsIgnoreCase("bxm")
                 && !ext.equalsIgnoreCase("bxs"))) {
             return null;
         }
-        
+
         return currentFile.getPath();
     }
 }

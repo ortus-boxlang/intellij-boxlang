@@ -1,6 +1,5 @@
 package com.ortussolutions.intellijboxlang.debug;
 
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator;
 import com.intellij.xdebugger.frame.XValue;
@@ -17,13 +16,11 @@ import org.jetbrains.annotations.Nullable;
  * Evaluates BoxLang expressions during debugging.
  * Used by the Watch panel, Evaluate Expression dialog (Alt+F8),
  * and hover evaluation in the editor.
- * 
+ *
  * Sends DAP `evaluate` requests to the bx-debugger server, which evaluates
  * the expression in the context of the current stack frame.
  */
 public class BoxLangEvaluator extends XDebuggerEvaluator {
-    private static final Logger LOG = Logger.getInstance(BoxLangEvaluator.class);
-
     private final BoxLangDebugProcess debugProcess;
     private final int frameId;
 
@@ -36,10 +33,8 @@ public class BoxLangEvaluator extends XDebuggerEvaluator {
     public void evaluate(@NotNull String expression,
                           @NotNull XEvaluationCallback callback,
                           @Nullable XSourcePosition expressionPosition) {
-        LOG.debug("Evaluating expression: " + expression + " in frame " + frameId);
-
         BoxLangDapService dapService = debugProcess.getDapService();
-        if (dapService == null || !dapService.isConnected()) {
+        if (!dapService.isConnected()) {
             callback.errorOccurred("Debug session is not connected");
             return;
         }
@@ -63,7 +58,6 @@ public class BoxLangEvaluator extends XDebuggerEvaluator {
                 if (ex.getCause() != null) {
                     message = ex.getCause().getMessage();
                 }
-                LOG.debug("Evaluation failed for '" + expression + "': " + message);
                 callback.errorOccurred(message != null ? message : "Evaluation failed");
                 return null;
             });
@@ -104,7 +98,7 @@ public class BoxLangEvaluator extends XDebuggerEvaluator {
             }
 
             BoxLangDapService dapService = debugProcess.getDapService();
-            if (dapService == null || !dapService.isConnected()) {
+            if (!dapService.isConnected()) {
                 node.addChildren(XValueChildrenList.EMPTY, true);
                 return;
             }
@@ -122,7 +116,6 @@ public class BoxLangEvaluator extends XDebuggerEvaluator {
                     node.addChildren(children, true);
                 })
                 .exceptionally(ex -> {
-                    LOG.warn("Failed to fetch children for evaluated expression: " + expression, ex);
                     node.addChildren(XValueChildrenList.EMPTY, true);
                     return null;
                 });

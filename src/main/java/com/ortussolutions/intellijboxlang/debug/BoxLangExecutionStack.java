@@ -1,6 +1,5 @@
 package com.ortussolutions.intellijboxlang.debug;
 
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.xdebugger.frame.XExecutionStack;
 import com.intellij.xdebugger.frame.XStackFrame;
 import org.eclipse.lsp4j.debug.StackFrame;
@@ -13,19 +12,17 @@ import java.util.List;
 /**
  * Represents the execution stack for a single thread in the BoxLang debugger.
  * Contains the list of stack frames retrieved from the DAP server's stackTrace response.
- * 
+ *
  * This is what populates the "Frames" panel in IntelliJ's debug tool window.
  */
 public class BoxLangExecutionStack extends XExecutionStack {
-    private static final Logger LOG = Logger.getInstance(BoxLangExecutionStack.class);
-
-    private final BoxLangDebugProcess debugProcess;
     private final int threadId;
     private final List<BoxLangStackFrame> frames;
+    private final @Nullable BoxLangStackFrame topFrame;
 
     /**
      * Creates an execution stack from DAP stack frames.
-     * 
+     *
      * @param debugProcess the debug process
      * @param threadId the thread ID this stack belongs to
      * @param threadName display name for this thread
@@ -36,7 +33,6 @@ public class BoxLangExecutionStack extends XExecutionStack {
                                   @NotNull String threadName,
                                   @NotNull StackFrame[] dapFrames) {
         super(threadName);
-        this.debugProcess = debugProcess;
         this.threadId = threadId;
         this.frames = new ArrayList<>(dapFrames.length);
 
@@ -44,7 +40,7 @@ public class BoxLangExecutionStack extends XExecutionStack {
             frames.add(new BoxLangStackFrame(debugProcess, dapFrame));
         }
 
-        LOG.debug("Created execution stack for thread " + threadId + " (" + threadName + ") with " + frames.size() + " frames");
+        this.topFrame = resolveTopFrame();
     }
 
     /**
@@ -56,10 +52,7 @@ public class BoxLangExecutionStack extends XExecutionStack {
 
     @Override
     public @Nullable XStackFrame getTopFrame() {
-        if (frames.isEmpty()) {
-            return null;
-        }
-        return frames.get(0);
+        return topFrame;
     }
 
     @Override
@@ -71,5 +64,17 @@ public class BoxLangExecutionStack extends XExecutionStack {
 
         List<BoxLangStackFrame> subList = frames.subList(firstFrameIndex, frames.size());
         container.addStackFrames(new ArrayList<>(subList), true);
+    }
+
+    private @Nullable BoxLangStackFrame resolveTopFrame() {
+        if (frames.isEmpty()) {
+            return null;
+        }
+        for (BoxLangStackFrame frame : frames) {
+            if (frame.getSourcePosition() != null) {
+                return frame;
+            }
+        }
+        return frames.get(0);
     }
 }

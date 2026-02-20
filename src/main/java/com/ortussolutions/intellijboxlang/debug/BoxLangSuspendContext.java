@@ -10,21 +10,19 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Represents the suspended state of a debug session.
  * Contains information about why execution stopped and the current execution stacks.
- * 
+ *
  * When execution stops (breakpoint hit, step completed, etc.), this context is created
  * with the stack frames fetched from the DAP server. IntelliJ uses this to populate
  * the Frames panel, highlight the current line, and enable stepping controls.
  */
 public class BoxLangSuspendContext extends XSuspendContext {
 
-    private final BoxLangDebugProcess debugProcess;
-    private final StoppedEventArguments stoppedEvent;
     private final int threadId;
     private final BoxLangExecutionStack executionStack;
 
     /**
      * Creates a suspend context with pre-fetched stack frames.
-     * 
+     *
      * @param debugProcess the debug process
      * @param stoppedEvent the DAP stopped event arguments
      * @param threadName display name for the stopped thread
@@ -34,8 +32,6 @@ public class BoxLangSuspendContext extends XSuspendContext {
                                   @NotNull StoppedEventArguments stoppedEvent,
                                   @NotNull String threadName,
                                   @NotNull StackFrame[] stackFrames) {
-        this.debugProcess = debugProcess;
-        this.stoppedEvent = stoppedEvent;
         this.threadId = stoppedEvent.getThreadId() != null ? stoppedEvent.getThreadId() : 1;
         this.executionStack = new BoxLangExecutionStack(debugProcess, threadId, threadName, stackFrames);
     }
@@ -45,20 +41,6 @@ public class BoxLangSuspendContext extends XSuspendContext {
      */
     public int getThreadId() {
         return threadId;
-    }
-
-    /**
-     * Returns the reason for stopping (breakpoint, step, pause, etc.)
-     */
-    public String getStopReason() {
-        return stoppedEvent.getReason();
-    }
-
-    /**
-     * Returns the debug process.
-     */
-    public BoxLangDebugProcess getDebugProcess() {
-        return debugProcess;
     }
 
     @Override

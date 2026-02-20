@@ -1,7 +1,6 @@
 package com.ortussolutions.intellijboxlang.debug;
 
 import com.intellij.execution.process.ProcessHandler;
-import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.execution.process.ProcessOutputType;
 import org.jetbrains.annotations.Nullable;
 
@@ -25,12 +24,9 @@ import java.io.OutputStream;
  * This handler also receives DAP output events and forwards them to IntelliJ's console.
  */
 public class BoxLangDapProcessHandler extends ProcessHandler {
-    private static final Logger LOG = Logger.getInstance(BoxLangDapProcessHandler.class);
-
     private volatile boolean destroyed = false;
 
     public BoxLangDapProcessHandler() {
-        LOG.info("BoxLangDapProcessHandler created - debug session lifecycle is now DAP-controlled");
     }
 
     /**
@@ -38,19 +34,16 @@ public class BoxLangDapProcessHandler extends ProcessHandler {
      */
     public void startNotified() {
         super.startNotify();
-        LOG.info("BoxLangDapProcessHandler started - session is active");
     }
 
     @Override
     protected void destroyProcessImpl() {
-        LOG.info("BoxLangDapProcessHandler: destroyProcessImpl called - user requested stop");
         destroyed = true;
         notifyProcessTerminated(0);
     }
 
     @Override
     protected void detachProcessImpl() {
-        LOG.info("BoxLangDapProcessHandler: detachProcessImpl called");
         destroyed = true;
         notifyProcessDetached();
     }
@@ -74,7 +67,6 @@ public class BoxLangDapProcessHandler extends ProcessHandler {
         if (destroyed) {
             return;
         }
-        LOG.info("BoxLangDapProcessHandler: DAP terminated event received - ending debug session");
         destroyed = true;
         notifyProcessTerminated(0);
     }
@@ -84,9 +76,6 @@ public class BoxLangDapProcessHandler extends ProcessHandler {
      * We store the exit code but don't terminate yet - wait for the "terminated" event.
      */
     public void onDapExited(int exitCode) {
-        LOG.info("BoxLangDapProcessHandler: DAP exited event received with code " + exitCode);
-        // Some DAP servers send exited without terminated. Handle both cases.
-        // We'll use a small delay to see if terminated comes, but for safety, terminate here.
         if (!destroyed) {
             destroyed = true;
             notifyProcessTerminated(exitCode);
@@ -95,7 +84,7 @@ public class BoxLangDapProcessHandler extends ProcessHandler {
 
     /**
      * Forwards DAP output to IntelliJ's console.
-     * 
+     *
      * @param text     The output text
      * @param category The DAP output category ("stdout", "stderr", "console", etc.)
      */
@@ -104,20 +93,11 @@ public class BoxLangDapProcessHandler extends ProcessHandler {
             return;
         }
 
-        if ("stderr".equals(category)) {
-            notifyTextAvailable(text, ProcessOutputType.STDERR);
-        } else if ("console".equals(category) || "important".equals(category)) {
-            notifyTextAvailable(text, ProcessOutputType.SYSTEM);
-        } else {
-            // "stdout" and anything else goes to stdout
-            notifyTextAvailable(text, ProcessOutputType.STDOUT);
-        }
-    }
-
-    /**
-     * Returns whether this handler has been destroyed/terminated.
-     */
-    public boolean isDestroyed() {
-        return destroyed;
+        ProcessOutputType outputType = switch (category) {
+            case "stderr" -> ProcessOutputType.STDERR;
+            case "console", "important" -> ProcessOutputType.SYSTEM;
+            default -> ProcessOutputType.STDOUT;
+        };
+        notifyTextAvailable(text, outputType);
     }
 }

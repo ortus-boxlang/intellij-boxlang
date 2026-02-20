@@ -6,8 +6,6 @@ import com.intellij.execution.configurations.*;
 import com.intellij.execution.runners.ExecutionEnvironment;
 import com.intellij.openapi.options.SettingsEditor;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.InvalidDataException;
-import org.jdom.Element;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -94,7 +92,7 @@ public class BoxLangRunConfiguration extends RunConfigurationBase<BoxLangRunConf
         if (isUseCurrentFile()) {
             return;
         }
-        
+
         String scriptPath = getScriptPath();
         if (scriptPath == null || scriptPath.isBlank()) {
             throw new RuntimeConfigurationError("Script path is not specified");
@@ -109,15 +107,5 @@ public class BoxLangRunConfiguration extends RunConfigurationBase<BoxLangRunConf
     public @Nullable RunProfileState getState(@NotNull Executor executor,
                                                @NotNull ExecutionEnvironment environment) throws ExecutionException {
         return new BoxLangRunProfileState(this, environment);
-    }
-
-    @Override
-    public void readExternal(@NotNull Element element) throws InvalidDataException {
-        super.readExternal(element);
-    }
-
-    @Override
-    public void writeExternal(@NotNull Element element) {
-        super.writeExternal(element);
     }
 }
