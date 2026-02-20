@@ -9,33 +9,93 @@ import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Provides run icons in the gutter for BoxLang files.
- * Shows a run icon on the first element of BoxLang files.
+ * 
+ * For .bx (class) files: Shows run icon on the main() method if present.
+ * For .bxs (script) files: Shows run icon on the first line.
+ * For .bxm (template) files: Shows run icon on the first line.
  */
 public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 
+    // Pattern to match "function main(" with optional whitespace and modifiers
+    // Matches: function main(), public function main(), static function main(), etc.
+    private static final Pattern MAIN_FUNCTION_PATTERN = Pattern.compile(
+            "(?:^|\\s)(?:public\\s+|private\\s+|static\\s+)*function\\s+main\\s*\\(",
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE
+    );
+
     @Override
     public @Nullable Info getInfo(@NotNull PsiElement element) {
-        // Only show on the first element of the file to avoid multiple markers
-        if (!isFirstElementInFile(element)) {
-            return null;
-        }
-
         PsiFile file = element.getContainingFile();
         if (file == null) {
             return null;
         }
 
-        // Check if it's a BoxLang file
         String fileName = file.getName();
-        if (!isBoxLangFile(fileName)) {
+        if (fileName == null) {
             return null;
         }
 
-        // Create the run actions
-        AnAction[] actions = ExecutorAction.getActions(0);
+        String lowerName = fileName.toLowerCase();
         
+        // For .bx (class) files, only show on the main method
+        if (lowerName.endsWith(".bx")) {
+            return getInfoForClassFile(element, file);
+        }
+        
+        // For .bxs and .bxm files, show on first line
+        if (lowerName.endsWith(".bxs") || lowerName.endsWith(".bxm")) {
+            return getInfoForScriptFile(element, file);
+        }
+
+        return null;
+    }
+
+    /**
+     * For .bx class files, show run icon on the main() method.
+     */
+    private @Nullable Info getInfoForClassFile(@NotNull PsiElement element, @NotNull PsiFile file) {
+        String text = file.getText();
+        if (text == null || text.isEmpty()) {
+            return null;
+        }
+
+        // Find the main function in the file
+        Matcher matcher = MAIN_FUNCTION_PATTERN.matcher(text);
+        if (!matcher.find()) {
+            // No main method found - don't show run icon
+            return null;
+        }
+
+        // Get the line number where main() is defined
+        int mainOffset = matcher.start();
+        // Skip any leading whitespace in the match to get to "function" or modifier
+        String match = matcher.group();
+        if (match.startsWith("\n") || match.startsWith(" ") || match.startsWith("\t")) {
+            mainOffset += 1;
+        }
+        
+        int mainLine = getLineNumber(text, mainOffset);
+
+        // Get the line number of the current element
+        int elementOffset = element.getTextOffset();
+        int elementLine = getLineNumber(text, elementOffset);
+
+        // Only show the marker if this element is on the same line as main()
+        if (elementLine != mainLine) {
+            return null;
+        }
+
+        // Check if this is the first element on this line to avoid duplicates
+        if (!isFirstElementOnLine(element, text, elementLine)) {
+            return null;
+        }
+
+        AnAction[] actions = ExecutorAction.getActions(0);
         return new Info(
                 AllIcons.RunConfigurations.TestState.Run,
                 actions,
@@ -44,8 +104,68 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
     }
 
     /**
+     * For .bxs and .bxm files, show run icon on the first line.
+     */
+    private @Nullable Info getInfoForScriptFile(@NotNull PsiElement element, @NotNull PsiFile file) {
+        if (!isFirstElementInFile(element)) {
+            return null;
+        }
+
+        AnAction[] actions = ExecutorAction.getActions(0);
+        return new Info(
+                AllIcons.RunConfigurations.TestState.Run,
+                actions,
+                psiElement -> "Run " + file.getName()
+        );
+    }
+
+    /**
+     * Gets the line number (0-indexed) for a given offset in the text.
+     */
+    private int getLineNumber(String text, int offset) {
+        int line = 0;
+        for (int i = 0; i < offset && i < text.length(); i++) {
+            if (text.charAt(i) == '\n') {
+                line++;
+            }
+        }
+        return line;
+    }
+
+    /**
+     * Checks if this element is the first element on its line.
+     */
+    private boolean isFirstElementOnLine(@NotNull PsiElement element, String text, int targetLine) {
+        // Find the start of the target line
+        int lineStart = 0;
+        int currentLine = 0;
+        for (int i = 0; i < text.length() && currentLine < targetLine; i++) {
+            if (text.charAt(i) == '\n') {
+                currentLine++;
+                lineStart = i + 1;
+            }
+        }
+
+        // The element should start at or very near the beginning of the line (after whitespace)
+        int elementOffset = element.getTextOffset();
+        
+        // Check if element is between line start and line start + some whitespace
+        for (int i = lineStart; i <= elementOffset && i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (i == elementOffset) {
+                return true; // Element starts here, and we only passed whitespace
+            }
+            if (c != ' ' && c != '\t') {
+                // Found non-whitespace before the element
+                return i == elementOffset;
+            }
+        }
+        
+        return elementOffset == lineStart;
+    }
+
+    /**
      * Checks if the element is the first significant element in the file.
-     * We check if this is the first child of the file to avoid duplicate markers.
      */
     private boolean isFirstElementInFile(PsiElement element) {
         PsiFile file = element.getContainingFile();
@@ -53,7 +173,6 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
             return false;
         }
 
-        // We want to place the marker on the first leaf element of the file
         PsiElement firstChild = file.getFirstChild();
         if (firstChild == null) {
             return false;
@@ -65,16 +184,5 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
         }
 
         return element.equals(firstChild);
-    }
-
-    /**
-     * Checks if the file is a BoxLang file based on its extension.
-     */
-    private boolean isBoxLangFile(String fileName) {
-        if (fileName == null) {
-            return false;
-        }
-        String lowerName = fileName.toLowerCase();
-        return lowerName.endsWith(".bx") || lowerName.endsWith(".bxm") || lowerName.endsWith(".bxs");
     }
 }
