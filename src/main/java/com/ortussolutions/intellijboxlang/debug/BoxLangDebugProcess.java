@@ -36,6 +36,9 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     // Track the current thread ID for stepping operations
     private volatile int activeThreadId = -1;
     
+    // Track the top frame ID of the current suspension, used for REPL evaluation
+    private volatile int activeFrameId = -1;
+    
     // Track whether we've received the 'initialized' event from DAP
     private volatile boolean dapInitialized = false;
     
@@ -89,8 +92,11 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public @Nullable ExecutionConsole createConsole() {
-        // Use the default console - output will be forwarded via the ProcessHandler
-        return super.createConsole();
+        // Create a debug console with REPL support for expression evaluation
+        BoxLangDebugConsole debugConsole = new BoxLangDebugConsole(
+                getSession().getProject(), this);
+        debugConsole.attachToProcess(processHandler);
+        return debugConsole.getConsoleView();
     }
 
     @Override
@@ -290,6 +296,11 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
                         ":" + frame.getLine());
                 }
                 
+                // Track the top frame ID for REPL evaluation
+                if (frames.length > 0) {
+                    activeFrameId = frames[0].getId();
+                }
+                
                 // Build a thread name for display
                 String threadName = "Thread " + threadId;
                 
@@ -353,6 +364,14 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     }
 
     // Helper methods
+
+    /**
+     * Returns the frame ID of the top frame in the current suspension.
+     * Used by the debug console for REPL evaluation context.
+     */
+    public int getActiveFrameId() {
+        return activeFrameId;
+    }
 
     private int getThreadId(@Nullable XSuspendContext context) {
         if (context instanceof BoxLangSuspendContext) {

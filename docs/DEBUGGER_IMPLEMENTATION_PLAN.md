@@ -17,7 +17,7 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 | 7 | Variables Display | ✅ Complete |
 | 8 | Stepping Controls | ✅ Complete |
 | 9 | Watch Expressions & Evaluation | ✅ Complete |
-| 10 | Console Integration | Pending |
+| 10 | Console Integration | ✅ Complete |
 
 **Branch:** `debugger`
 
@@ -371,13 +371,18 @@ Sends DAP `evaluate` requests with the expression and current frame ID. Results 
 
 **Goal:** Proper console output and input during debugging.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
 ### Tasks
 
-- Handle DAP `output` events
-- Create Debug Console View
-- Handle Console Input (if supported)
+- ✅ Handle DAP `output` events — forwarded via `BoxLangDapProcessHandler.onDapOutput()` with proper stdout/stderr/system categorization
+- ✅ Create Debug Console View — `BoxLangDebugConsole` wraps `LanguageConsoleImpl` with BoxLang syntax highlighting
+- ✅ REPL expression evaluation — Enter key in console input sends DAP `evaluate` with `"repl"` context, displays typed results
+- ✅ Active frame tracking — `BoxLangDebugProcess.getActiveFrameId()` tracks the top frame for REPL context
+
+### Files Created/Modified:
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugConsole.java` — NEW: Debug console with REPL
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugProcess.java` — Modified: `createConsole()` uses `BoxLangDebugConsole`, added `activeFrameId` tracking
 
 ### Testing Criteria
 
@@ -385,7 +390,8 @@ Sends DAP `evaluate` requests with the expression and current frame ID. Results 
 |------|-----------------|
 | println output | Appears in Debug Console |
 | Error output | Shown in red/error styling |
-| Console clear | Can clear console output |
+| REPL expression | Enter evaluates expression and shows result |
+| REPL error | Error message shown in red |
 
 ---
 
@@ -397,6 +403,7 @@ src/main/java/com/ortussolutions/intellijboxlang/
 │   ├── BoxLangDapService.java           # DAP client service
 │   ├── BoxLangDapClient.java            # DAP client callbacks
 │   ├── BoxLangDapProcessHandler.java    # Custom ProcessHandler for DAP lifecycle
+│   ├── BoxLangDebugConsole.java         # Debug console with REPL evaluation
 │   ├── BoxLangDebugRunner.java          # Debug program runner
 │   ├── BoxLangDebugProcess.java         # XDebugProcess implementation
 │   ├── BoxLangSuspendContext.java       # Suspend context
