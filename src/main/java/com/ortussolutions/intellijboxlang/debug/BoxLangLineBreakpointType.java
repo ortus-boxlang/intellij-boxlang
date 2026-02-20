@@ -3,12 +3,9 @@ package com.ortussolutions.intellijboxlang.debug;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType;
-import com.ortussolutions.intellijboxlang.BoxLangIcons;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import javax.swing.*;
 
 /**
  * Defines the line breakpoint type for BoxLang files.
@@ -40,24 +37,6 @@ public class BoxLangLineBreakpointType extends XLineBreakpointType<BoxLangBreakp
     @Override
     public BoxLangBreakpointProperties createBreakpointProperties(@NotNull VirtualFile file, int line) {
         return new BoxLangBreakpointProperties();
-    }
-
-    /**
-     * Returns the icon for enabled breakpoints.
-     */
-    @NotNull
-    @Override
-    public Icon getEnabledIcon() {
-        return BoxLangIcons.FILE;
-    }
-
-    /**
-     * Returns the icon for disabled breakpoints.
-     */
-    @NotNull
-    @Override
-    public Icon getDisabledIcon() {
-        return BoxLangIcons.FILE;
     }
 
     /**
