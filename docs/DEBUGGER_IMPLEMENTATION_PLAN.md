@@ -12,7 +12,7 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 | 2 | Run Configuration Producer | ✅ Complete |
 | 3 | DAP Client Infrastructure | ✅ Complete |
 | 4 | Breakpoint Support | ✅ Complete |
-| 5 | Debug Process Core | Pending |
+| 5 | Debug Process Core | ✅ Complete |
 | 6 | Execution Suspension & Stack Frames | Pending |
 | 7 | Variables Display | Pending |
 | 8 | Stepping Controls | Pending |
@@ -206,40 +206,26 @@ dependencies {
 
 **Goal:** Create the debug process that manages a debug session.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
-### Tasks
+**Files Created:**
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugProcess.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangBreakpointHandler.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebuggerEditorsProvider.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugRunner.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangSuspendContext.java`
 
-#### 5.1 Create XDebugProcess Implementation
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugProcess.java`
-
-```java
-public class BoxLangDebugProcess extends XDebugProcess {
-    private final BoxLangDapService dapService;
-    
-    @Override
-    public XBreakpointHandler<?>[] getBreakpointHandlers() {
-        return new XBreakpointHandler[]{ lineBreakpointHandler };
-    }
-    
-    @Override
-    public XDebuggerEditorsProvider getEditorsProvider() {
-        return new BoxLangDebuggerEditorsProvider();
-    }
-}
+**plugin.xml additions:**
+```xml
+<programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
 ```
 
-#### 5.2 Create Breakpoint Handler
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangBreakpointHandler.java`
-
-#### 5.3 Create Debugger Editors Provider
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebuggerEditorsProvider.java`
-
-#### 5.4 Create Debug Program Runner
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDebugRunner.java`
-
-#### 5.5 Update plugin.xml
-Register the debug runner.
+**Features:**
+- Debug runner that starts the DAP server via bx-debugger module
+- Debug process managing DAP connection and debug operations
+- Breakpoint handler syncing IntelliJ breakpoints to DAP server
+- Basic suspend context (stack frames in Phase 6)
+- Stepping operations (step over, step into, step out, resume, pause)
 
 ### Testing Criteria
 

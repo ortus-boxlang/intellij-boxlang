@@ -60,6 +60,7 @@
 
     <!-- Debug Support -->
     <xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
 
   </extensions>
 
