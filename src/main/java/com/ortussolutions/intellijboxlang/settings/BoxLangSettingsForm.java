@@ -21,6 +21,7 @@ public final class BoxLangSettingsForm {
     private final JBTextField lspModulesField = new JBTextField();
     private final JBTextField lspJvmArgsField = new JBTextField();
     private final JSpinner lspMaxHeapSizeSpinner = new JSpinner(new SpinnerNumberModel(512, 64, 8192, 64));
+    private final JBTextField debuggerJarPathField = new JBTextField();
     private final JBCheckBox useBvmrcCheckBox = new JBCheckBox("Use .bvmrc for BoxLang version");
     private final JBCheckBox promptForDownloadsCheckBox = new JBCheckBox("Prompt before downloading BoxLang/LSP");
 
@@ -37,6 +38,8 @@ public final class BoxLangSettingsForm {
             .addLabeledComponent("LSP Modules", lspModulesField)
             .addLabeledComponent("LSP JVM Args", lspJvmArgsField)
             .addLabeledComponent("LSP Max Heap (MB)", lspMaxHeapSizeSpinner)
+            .addSeparator()
+            .addLabeledComponent("Debugger Jar Path", debuggerJarPathField)
             .addSeparator()
             .addComponent(useBvmrcCheckBox)
             .addComponent(promptForDownloadsCheckBox)
@@ -58,6 +61,7 @@ public final class BoxLangSettingsForm {
         lspModulesField.setEnabled(enabled);
         lspJvmArgsField.setEnabled(enabled);
         lspMaxHeapSizeSpinner.setEnabled(enabled);
+        debuggerJarPathField.setEnabled(enabled);
         useBvmrcCheckBox.setEnabled(enabled);
         promptForDownloadsCheckBox.setEnabled(enabled);
     }
@@ -73,6 +77,7 @@ public final class BoxLangSettingsForm {
         lspModulesField.setText(nullToEmpty(state.lspModules));
         lspJvmArgsField.setText(nullToEmpty(state.lspJvmArgs));
         lspMaxHeapSizeSpinner.setValue(state.lspMaxHeapSize);
+        debuggerJarPathField.setText(nullToEmpty(state.debuggerJarPath));
         useBvmrcCheckBox.setSelected(state.useBvmrc);
         promptForDownloadsCheckBox.setSelected(state.promptForDownloads);
     }
@@ -88,6 +93,7 @@ public final class BoxLangSettingsForm {
         state.lspModules = emptyToNull(lspModulesField.getText());
         state.lspJvmArgs = emptyToNull(lspJvmArgsField.getText());
         state.lspMaxHeapSize = ((Number) lspMaxHeapSizeSpinner.getValue()).intValue();
+        state.debuggerJarPath = emptyToNull(debuggerJarPathField.getText());
         state.useBvmrc = useBvmrcCheckBox.isSelected();
         state.promptForDownloads = promptForDownloadsCheckBox.isSelected();
     }
@@ -103,6 +109,7 @@ public final class BoxLangSettingsForm {
             || !Objects.equals(state.lspModules, emptyToNull(lspModulesField.getText()))
             || !Objects.equals(state.lspJvmArgs, emptyToNull(lspJvmArgsField.getText()))
             || state.lspMaxHeapSize != ((Number) lspMaxHeapSizeSpinner.getValue()).intValue()
+            || !Objects.equals(state.debuggerJarPath, emptyToNull(debuggerJarPathField.getText()))
             || state.useBvmrc != useBvmrcCheckBox.isSelected()
             || state.promptForDownloads != promptForDownloadsCheckBox.isSelected();
     }

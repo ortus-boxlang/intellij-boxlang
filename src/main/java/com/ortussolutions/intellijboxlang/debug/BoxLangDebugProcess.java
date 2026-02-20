@@ -1,8 +1,8 @@
 package com.ortussolutions.intellijboxlang.debug;
 
-import com.intellij.execution.ExecutionResult;
 import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugSession;
@@ -26,22 +26,55 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     private final BoxLangDapService dapService;
     private final BoxLangBreakpointHandler breakpointHandler;
     private final BoxLangDebuggerEditorsProvider editorsProvider;
-    private final ExecutionResult executionResult;
+    private final BoxLangDapProcessHandler processHandler;
+    
+    // Launch parameters - stored so we can send launch request at the right time
+    private final String scriptPath;
+    private final String workingDirectory;
+    private final List<String> programArgs;
     
     // Track the current thread ID for stepping operations
     private volatile int activeThreadId = -1;
+    
+    // Track whether we've received the 'initialized' event from DAP
+    private volatile boolean dapInitialized = false;
+    
+    // Track whether IntelliJ has finished registering breakpoints (sessionInitialized called)
+    private volatile boolean sessionReady = false;
+    
+    // Track whether we've already completed configuration (prevent double calls)
+    private volatile boolean configurationCompleted = false;
 
     public BoxLangDebugProcess(@NotNull XDebugSession session,
                                 @NotNull BoxLangDapService dapService,
-                                @Nullable ExecutionResult executionResult) {
+                                @NotNull String scriptPath,
+                                @Nullable String workingDirectory,
+                                @Nullable List<String> programArgs) {
         super(session);
         this.dapService = dapService;
-        this.executionResult = executionResult;
+        this.scriptPath = scriptPath;
+        this.workingDirectory = workingDirectory;
+        this.programArgs = programArgs;
         this.breakpointHandler = new BoxLangBreakpointHandler(this);
         this.editorsProvider = new BoxLangDebuggerEditorsProvider();
         
+        // Create a custom ProcessHandler that stays alive until DAP terminated/exited events.
+        // This is the key fix: previously we used the ProcessHandler from profileState.execute()
+        // which would terminate when the normal (non-debugged) BoxLang process finished,
+        // causing IntelliJ to tear down the debug session prematurely.
+        this.processHandler = new BoxLangDapProcessHandler();
+        this.processHandler.startNotified();
+        
         // Register for DAP events
         dapService.addEventListener(this);
+        
+        // Check if the 'initialized' event was already received before we registered
+        // This can happen because dapService.start() sends initialize and may receive
+        // the initialized event before BoxLangDebugProcess is created
+        if (dapService.isConfigurationReady()) {
+            LOG.info("DAP server was already initialized before we registered - setting dapInitialized flag");
+            dapInitialized = true;
+        }
     }
 
     @Override
@@ -56,18 +89,13 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public @Nullable ExecutionConsole createConsole() {
-        if (executionResult != null) {
-            return executionResult.getExecutionConsole();
-        }
+        // Use the default console - output will be forwarded via the ProcessHandler
         return super.createConsole();
     }
 
     @Override
     public @Nullable ProcessHandler doGetProcessHandler() {
-        if (executionResult != null) {
-            return executionResult.getProcessHandler();
-        }
-        return null;
+        return processHandler;
     }
 
     /**
@@ -78,19 +106,69 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     }
 
     /**
-     * Called when the debug session is fully started.
-     * Sends the configurationDone request to the DAP server.
+     * Called when the debug session is fully started and IntelliJ has registered all breakpoints.
+     * This is the signal that we can complete the DAP configuration sequence.
+     * 
+     * IMPORTANT: This method is called automatically by IntelliJ AFTER all initial breakpoints
+     * have been registered via registerBreakpoint() on our XBreakpointHandler. Do NOT call this
+     * method manually from outside.
      */
+    @Override
     public void sessionInitialized() {
-        LOG.info("Debug session initialized, sending configurationDone");
+        LOG.info("Debug session initialized - IntelliJ has registered all breakpoints");
+        LOG.info("  dapInitialized=" + dapInitialized + ", sessionReady=" + sessionReady + ", configurationCompleted=" + configurationCompleted);
+        sessionReady = true;
         
-        // Sync all breakpoints first
-        breakpointHandler.syncAllBreakpoints();
+        // If DAP is already initialized, complete the configuration now
+        // Otherwise, onInitialized will do it when the DAP server is ready
+        if (dapInitialized) {
+            LOG.info("DAP already initialized, calling completeConfiguration()");
+            completeConfiguration();
+        } else {
+            LOG.info("Waiting for DAP 'initialized' event before completing configuration");
+        }
+    }
+    
+    /**
+     * Complete the DAP configuration by syncing breakpoints, launching, and sending configurationDone.
+     * This should only be called when BOTH the DAP server is initialized AND IntelliJ has
+     * finished registering breakpoints.
+     * 
+     * The correct DAP message order is:
+     * 1. setBreakpoints (for all files)
+     * 2. launch
+     * 3. configurationDone
+     */
+    private synchronized void completeConfiguration() {
+        // Guard against being called multiple times
+        if (configurationCompleted) {
+            LOG.debug("Configuration already completed, skipping duplicate call");
+            return;
+        }
+        configurationCompleted = true;
         
-        // Tell the server we're done configuring
-        dapService.configurationDone()
+        LOG.info("Completing DAP configuration - correct order: breakpoints -> launch -> configurationDone");
+        LOG.info("  scriptPath=" + scriptPath + ", workingDirectory=" + workingDirectory);
+        
+        // Step 1: Sync all breakpoints to the DAP server FIRST
+        breakpointHandler.syncAllBreakpoints()
+            .thenCompose(v -> {
+                // Step 2: Send launch request AFTER breakpoints are set
+                LOG.info("All breakpoints synced, sending launch request for: " + scriptPath);
+                return dapService.launch(scriptPath, workingDirectory, programArgs, false);
+            })
+            .thenCompose(v -> {
+                // Step 3: Send configurationDone AFTER launch
+                LOG.info("Launch request completed, sending configurationDone");
+                return dapService.configurationDone();
+            })
+            .thenRun(() -> {
+                LOG.info("configurationDone sent successfully - debug session fully configured");
+                // Mark configuration as complete so future breakpoint changes are sent immediately
+                breakpointHandler.markConfigurationComplete();
+            })
             .exceptionally(ex -> {
-                LOG.warn("Failed to send configurationDone", ex);
+                LOG.error("Failed to complete DAP configuration", ex);
                 return null;
             });
     }
@@ -173,17 +251,67 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     // DAP Event Handlers
 
     @Override
+    public void onInitialized() {
+        LOG.info("DAP server initialized event received");
+        LOG.info("  dapInitialized=" + dapInitialized + ", sessionReady=" + sessionReady + ", configurationCompleted=" + configurationCompleted);
+        dapInitialized = true;
+        
+        // If IntelliJ has already registered breakpoints (sessionInitialized called),
+        // complete the configuration now. Otherwise, sessionInitialized will do it.
+        if (sessionReady) {
+            LOG.info("IntelliJ session already ready, calling completeConfiguration()");
+            completeConfiguration();
+        } else {
+            LOG.info("Waiting for IntelliJ to finish registering breakpoints before completing configuration");
+        }
+    }
+
+    @Override
     public void onStopped(StoppedEventArguments args) {
         LOG.info("Execution stopped: " + args.getReason() + " on thread " + args.getThreadId());
         
-        if (args.getThreadId() != null) {
-            activeThreadId = args.getThreadId();
-        }
+        int threadId = args.getThreadId() != null ? args.getThreadId() : 1;
+        activeThreadId = threadId;
         
-        // Fetch stack trace and create suspend context
-        // This will be implemented in Phase 6
-        // For now, we'll create a placeholder suspend context
-        getSession().positionReached(new BoxLangSuspendContext(this, args));
+        // Fetch stack trace from DAP server before creating the suspend context.
+        // This ensures IntelliJ has real stack frames to display in the Frames panel
+        // and can highlight the correct source line.
+        dapService.stackTrace(threadId)
+            .thenAccept(stackTraceResponse -> {
+                org.eclipse.lsp4j.debug.StackFrame[] frames = stackTraceResponse.getStackFrames();
+                if (frames == null) {
+                    frames = new org.eclipse.lsp4j.debug.StackFrame[0];
+                }
+                
+                LOG.info("Stack trace received: " + frames.length + " frames for thread " + threadId);
+                for (org.eclipse.lsp4j.debug.StackFrame frame : frames) {
+                    LOG.debug("  Frame: " + frame.getName() + " at " + 
+                        (frame.getSource() != null ? frame.getSource().getPath() : "<no source>") + 
+                        ":" + frame.getLine());
+                }
+                
+                // Build a thread name for display
+                String threadName = "Thread " + threadId;
+                
+                BoxLangSuspendContext suspendContext = new BoxLangSuspendContext(
+                    this, args, threadName, frames);
+                
+                // positionReached must be called on the EDT for IntelliJ to properly
+                // activate the debug toolbar (step over/into/out, resume buttons)
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    getSession().positionReached(suspendContext);
+                });
+            })
+            .exceptionally(ex -> {
+                LOG.warn("Failed to fetch stack trace for thread " + threadId + ", creating empty suspend context", ex);
+                // Fall back to an empty stack trace so the session still pauses
+                BoxLangSuspendContext suspendContext = new BoxLangSuspendContext(
+                    this, args, "Thread " + threadId, new org.eclipse.lsp4j.debug.StackFrame[0]);
+                ApplicationManager.getApplication().invokeLater(() -> {
+                    getSession().positionReached(suspendContext);
+                });
+                return null;
+            });
     }
 
     @Override
@@ -194,11 +322,13 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     @Override
     public void onExited(ExitedEventArguments args) {
         LOG.info("Process exited with code: " + args.getExitCode());
+        processHandler.onDapExited(args.getExitCode());
     }
 
     @Override
     public void onTerminated(TerminatedEventArguments args) {
         LOG.info("Debug session terminated");
+        processHandler.onDapTerminated();
         getSession().stop();
     }
 
@@ -209,10 +339,12 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public void onOutput(OutputEventArguments args) {
-        // Output will be handled by the console in Phase 10
         String output = args.getOutput();
         String category = args.getCategory();
         LOG.debug("Output [" + category + "]: " + output);
+        
+        // Forward output to the console via the ProcessHandler
+        processHandler.onDapOutput(output, category);
     }
 
     @Override

@@ -11,6 +11,7 @@ public class BoxLangSettingsState {
     public String lspModules;
     public String lspJvmArgs;
     public int lspMaxHeapSize = 512;
+    public String debuggerJarPath;
     public boolean useBvmrc = true;
     public boolean promptForDownloads = true;
 }

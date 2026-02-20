@@ -19,7 +19,8 @@ public class BoxLangDapClient implements IDebugProtocolClient {
 
     @Override
     public void initialized() {
-        LOG.debug("DAP: initialized event received");
+        LOG.info("DAP: initialized event received - server is ready for configuration");
+        service.handleInitialized();
     }
 
     @Override

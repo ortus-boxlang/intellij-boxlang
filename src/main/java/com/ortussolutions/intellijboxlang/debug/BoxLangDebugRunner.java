@@ -1,7 +1,6 @@
 package com.ortussolutions.intellijboxlang.debug;
 
 import com.intellij.execution.ExecutionException;
-import com.intellij.execution.ExecutionResult;
 import com.intellij.execution.configurations.RunProfile;
 import com.intellij.execution.configurations.RunProfileState;
 import com.intellij.execution.configurations.RunnerSettings;
@@ -51,7 +50,6 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
             throw new ExecutionException("Invalid run profile state");
         }
 
-        BoxLangRunProfileState profileState = (BoxLangRunProfileState) state;
         BoxLangRunConfiguration configuration = (BoxLangRunConfiguration) environment.getRunProfile();
         Project project = environment.getProject();
 
@@ -85,7 +83,7 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
                     new XDebugProcessStarter() {
                         @Override
                         public @NotNull XDebugProcess start(@NotNull XDebugSession session) throws ExecutionException {
-                            return createDebugProcess(session, profileState, environment, 
+                            return createDebugProcess(session, environment, 
                                     finalScriptPath, finalWorkingDirectory, finalProgramArgs);
                         }
                     }
@@ -98,7 +96,6 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
     }
 
     private BoxLangDebugProcess createDebugProcess(@NotNull XDebugSession session,
-                                                    @NotNull BoxLangRunProfileState profileState,
                                                     @NotNull ExecutionEnvironment environment,
                                                     @NotNull String scriptPath,
                                                     @Nullable String workingDirectory,
@@ -113,27 +110,22 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
             LOG.info("Starting DAP server for debugging: " + scriptPath);
             dapService.start();
             
-            // Execute the run profile to get the console
-            ExecutionResult executionResult = null;
-            try {
-                executionResult = profileState.execute(environment.getExecutor(), this);
-            } catch (Exception e) {
-                LOG.warn("Could not create execution result for console", e);
-            }
+            // IMPORTANT: We do NOT launch a normal BoxLang process here!
+            // Previously, we called profileState.execute() which launched a non-debugged
+            // BoxLang process and used its ProcessHandler. When that process finished quickly
+            // (e.g., a simple script), IntelliJ would see the ProcessHandler terminate and
+            // tear down the entire debug session - killing the bx-debugger's JDI-launched VM
+            // before breakpoints could be hit.
+            //
+            // Instead, the bx-debugger handles launching the BoxLang VM via JDI (Java Debug
+            // Interface) when it receives the DAP "launch" request. We use a custom
+            // BoxLangDapProcessHandler that stays alive until DAP terminated/exited events
+            // are received, keeping the debug session alive for the entire debugging lifecycle.
             
-            // Create the debug process
-            BoxLangDebugProcess debugProcess = new BoxLangDebugProcess(session, dapService, executionResult);
-            
-            // Launch the script in debug mode
-            dapService.launch(scriptPath, workingDirectory, programArgs, false)
-                .thenRun(() -> {
-                    LOG.info("Launch request sent successfully");
-                    debugProcess.sessionInitialized();
-                })
-                .exceptionally(ex -> {
-                    LOG.error("Failed to launch debug session", ex);
-                    return null;
-                });
+            // Create the debug process with DAP-controlled lifecycle
+            BoxLangDebugProcess debugProcess = new BoxLangDebugProcess(
+                session, dapService,
+                scriptPath, workingDirectory, programArgs);
             
             return debugProcess;
             

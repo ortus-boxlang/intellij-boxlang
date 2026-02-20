@@ -50,6 +50,7 @@ public class BoxLangDapService implements Disposable {
     private IDebugProtocolServer debugServer;
     private Capabilities serverCapabilities;
     private volatile boolean initialized = false;
+    private volatile boolean configurationReady = false;
     private volatile boolean terminated = false;
 
     public BoxLangDapService(@NotNull Project project) {
@@ -75,6 +76,14 @@ public class BoxLangDapService implements Disposable {
      */
     public boolean isConnected() {
         return initialized && !terminated && debugServer != null;
+    }
+
+    /**
+     * Returns true if the DAP server has sent the 'initialized' event
+     * and is ready to receive breakpoint configuration.
+     */
+    public boolean isConfigurationReady() {
+        return configurationReady && isConnected();
     }
 
     /**
@@ -107,24 +116,36 @@ public class BoxLangDapService implements Disposable {
         LspBootstrapResult bootstrap = BoxLangLspBootstrapService.prepare(project);
         int port = allocatePort();
 
+        // Resolve the debugger JAR path
+        String debuggerJarPath = resolveDebuggerJarPath(settings, bootstrap);
+        if (debuggerJarPath == null) {
+            throw new IllegalStateException(
+                "BoxLang Debugger JAR not found. Please configure the Debugger Jar Path in BoxLang settings, " +
+                "or ensure the bx-debugger module is installed in BoxLang home.");
+        }
+
+        // Build classpath with both BoxLang runtime and debugger JARs
+        String classpath = bootstrap.boxLangJarPath.toString() + 
+            java.io.File.pathSeparator + debuggerJarPath;
+
         GeneralCommandLine commandLine = new GeneralCommandLine(resolveJavaExecutable(settings));
         commandLine.withCharset(StandardCharsets.UTF_8);
         commandLine.withEnvironment("BOXLANG_HOME", bootstrap.lspBoxLangHome.toString());
-        commandLine.withEnvironment("CLASSPATH", bootstrap.boxLangJarPath.toString());
         if (settings.javaHome != null && !settings.javaHome.isBlank()) {
             commandLine.withEnvironment("JAVA_HOME", settings.javaHome);
         }
 
         commandLine.addParameters(buildJvmArgs(settings));
-        commandLine.addParameter("ortus.boxlang.runtime.BoxRunner");
-        // TODO: Update this when the DAP module is available
-        // For now, we'll use a placeholder - this will need to be updated
-        // to match the actual BoxLang DAP server module name
-        commandLine.addParameter("module:bx-debugger");
-        commandLine.addParameters("--port", String.valueOf(port));
+        commandLine.addParameter("-cp");
+        commandLine.addParameter(classpath);
+        commandLine.addParameter("ortus.boxlang.bxdebugger.BoxDebugger");
+        commandLine.addParameter(String.valueOf(port));
 
         LOG.info("Starting DAP server process: " + commandLine.getCommandLineString());
         serverProcess = commandLine.createProcess();
+        
+        // Start threads to capture and log the debugger server's stdout/stderr
+        startOutputCapture(serverProcess);
         
         socket = connectWithRetries(port);
         LOG.info("Connected to DAP server on port " + port);
@@ -156,6 +177,66 @@ public class BoxLangDapService implements Disposable {
 
         initialized = true;
         LOG.info("DAP server initialized successfully");
+    }
+
+    /**
+     * Resolves the path to the bx-debugger JAR.
+     * Checks in order:
+     * 1. Configured debuggerJarPath in settings
+     * 2. Project BoxLang home modules directory
+     * 3. User BoxLang home modules directory (~/.boxlang/modules)
+     */
+    private String resolveDebuggerJarPath(BoxLangResolvedSettings settings, LspBootstrapResult bootstrap) {
+        // 1. Check configured path in settings
+        if (settings.debuggerJarPath != null && !settings.debuggerJarPath.isBlank()) {
+            Path configuredPath = Path.of(settings.debuggerJarPath);
+            if (configuredPath.toFile().exists()) {
+                LOG.info("Using configured debugger JAR: " + configuredPath);
+                return configuredPath.toString();
+            }
+            LOG.warn("Configured debugger JAR not found: " + settings.debuggerJarPath);
+        }
+
+        // 2. Check project BoxLang home modules directory
+        Path projectBoxLangHome = bootstrap.lspBoxLangHome;
+        String jarPath = findDebuggerJarInHome(projectBoxLangHome, "project BoxLang home");
+        if (jarPath != null) {
+            return jarPath;
+        }
+
+        // 3. Check user BoxLang home modules directory (~/.boxlang)
+        String userHome = System.getProperty("user.home");
+        Path userBoxLangHome = Path.of(userHome, ".boxlang");
+        jarPath = findDebuggerJarInHome(userBoxLangHome, "user BoxLang home");
+        if (jarPath != null) {
+            return jarPath;
+        }
+
+        LOG.warn("Could not find bx-debugger JAR in any location");
+        return null;
+    }
+
+    /**
+     * Searches for the bx-debugger JAR in the modules directory of a BoxLang home.
+     */
+    private String findDebuggerJarInHome(Path boxLangHome, String locationName) {
+        if (boxLangHome == null || !boxLangHome.toFile().exists()) {
+            return null;
+        }
+
+        // Check for the module in the modules directory
+        Path modulesDir = boxLangHome.resolve("modules").resolve("bx-debugger").resolve("libs");
+        if (modulesDir.toFile().exists()) {
+            // Find the debugger JAR in the libs directory
+            java.io.File[] jars = modulesDir.toFile().listFiles((dir, name) -> 
+                name.startsWith("bx-debugger") && name.endsWith(".jar"));
+            if (jars != null && jars.length > 0) {
+                LOG.info("Using debugger JAR from " + locationName + ": " + jars[0].getAbsolutePath());
+                return jars[0].getAbsolutePath();
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -472,7 +553,59 @@ public class BoxLangDapService implements Disposable {
         }
     }
 
+    void handleInitialized() {
+        LOG.info("DAP server sent 'initialized' event - ready for configuration");
+        configurationReady = true;
+        for (DapEventListener listener : eventListeners) {
+            try {
+                listener.onInitialized();
+            } catch (Exception e) {
+                LOG.warn("Error in DAP event listener", e);
+            }
+        }
+    }
+
     // Private helper methods
+
+    /**
+     * Starts threads to capture and log the debugger server's stdout and stderr output.
+     * This helps with debugging by showing what the bx-debugger is logging.
+     */
+    private void startOutputCapture(Process process) {
+        // Capture stdout
+        java.lang.Thread stdoutThread = new java.lang.Thread(() -> {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    LOG.info("[bx-debugger] " + line);
+                }
+            } catch (IOException e) {
+                if (!terminated) {
+                    LOG.debug("Error reading bx-debugger stdout: " + e.getMessage());
+                }
+            }
+        }, "bx-debugger-stdout");
+        stdoutThread.setDaemon(true);
+        stdoutThread.start();
+
+        // Capture stderr
+        java.lang.Thread stderrThread = new java.lang.Thread(() -> {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    LOG.warn("[bx-debugger] " + line);
+                }
+            } catch (IOException e) {
+                if (!terminated) {
+                    LOG.debug("Error reading bx-debugger stderr: " + e.getMessage());
+                }
+            }
+        }, "bx-debugger-stderr");
+        stderrThread.setDaemon(true);
+        stderrThread.start();
+    }
 
     private int allocatePort() throws IOException {
         try (ServerSocket socket = new ServerSocket(0)) {
@@ -551,6 +684,7 @@ public class BoxLangDapService implements Disposable {
      * Interface for listening to DAP events.
      */
     public interface DapEventListener {
+        default void onInitialized() {}
         default void onStopped(StoppedEventArguments args) {}
         default void onContinued(ContinuedEventArguments args) {}
         default void onExited(ExitedEventArguments args) {}

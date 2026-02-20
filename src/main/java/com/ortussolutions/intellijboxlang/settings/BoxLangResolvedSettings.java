@@ -11,6 +11,7 @@ public class BoxLangResolvedSettings {
     public String lspModules;
     public String lspJvmArgs;
     public int lspMaxHeapSize;
+    public String debuggerJarPath;
     public boolean useBvmrc;
     public boolean promptForDownloads;
 }
