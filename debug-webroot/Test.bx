@@ -1,0 +1,11 @@
+class accessors="true" {
+
+    property name="foo";
+    property name="baz";
+
+	function init() {
+		variables.foo = "bar";
+		variables.baz = "qux";
+		return this;
+	}
+}

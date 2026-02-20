@@ -55,12 +55,14 @@
 
     <!-- Run Configuration -->
     <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangConfigurationType"/>
+    <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangAttachConfigurationType"/>
     <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.run.BoxLangRunConfigurationProducer"/>
     <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.run.BoxLangRunLineMarkerProvider"/>
 
     <!-- Debug Support -->
     <xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
     <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangAttachDebugRunner"/>
 
   </extensions>
 
