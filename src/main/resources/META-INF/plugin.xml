@@ -55,6 +55,8 @@
 
     <!-- Run Configuration -->
     <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangConfigurationType"/>
+    <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.run.BoxLangRunConfigurationProducer"/>
+    <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.run.BoxLangRunLineMarkerProvider"/>
 
   </extensions>
 

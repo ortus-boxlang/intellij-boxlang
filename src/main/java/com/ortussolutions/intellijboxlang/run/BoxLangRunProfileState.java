@@ -120,11 +120,36 @@ public class BoxLangRunProfileState extends CommandLineState {
     }
 
     private String resolveJavaExecutable(BoxLangResolvedSettings settings) {
-        if (settings.javaHome == null || settings.javaHome.isBlank()) {
-            return "java";
-        }
         String javaExecutable = SystemInfo.isWindows ? "java.exe" : "java";
-        return Path.of(settings.javaHome, "bin", javaExecutable).toString();
+        
+        // First, try the configured Java home from settings
+        if (settings.javaHome != null && !settings.javaHome.isBlank()) {
+            Path javaPath = Path.of(settings.javaHome, "bin", javaExecutable);
+            if (javaPath.toFile().exists()) {
+                return javaPath.toString();
+            }
+        }
+        
+        // Second, try JAVA_HOME environment variable
+        String javaHomeEnv = System.getenv("JAVA_HOME");
+        if (javaHomeEnv != null && !javaHomeEnv.isBlank()) {
+            Path javaPath = Path.of(javaHomeEnv, "bin", javaExecutable);
+            if (javaPath.toFile().exists()) {
+                return javaPath.toString();
+            }
+        }
+        
+        // Third, try to find Java in the current process (IntelliJ's JDK)
+        String currentJavaHome = System.getProperty("java.home");
+        if (currentJavaHome != null && !currentJavaHome.isBlank()) {
+            Path javaPath = Path.of(currentJavaHome, "bin", javaExecutable);
+            if (javaPath.toFile().exists()) {
+                return javaPath.toString();
+            }
+        }
+        
+        // Last resort - use "java" from PATH and hope it works
+        return "java";
     }
 
     private List<String> buildJvmArgs(BoxLangResolvedSettings settings) {
