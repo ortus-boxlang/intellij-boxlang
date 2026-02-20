@@ -28,6 +28,8 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 - `e1e371e` - Implement Phase 2: Run configuration producer and gutter icons
 - `6c22f58` - Show run gutter icon on main() method for .bx class files
 - `c898c9d` - Implement Phase 3: DAP client infrastructure
+- `4c2b357` - Implement Phase 4: Breakpoint support
+- `b96c4f6` - Fix breakpoint icons to use standard red dots
 
 ---
 
