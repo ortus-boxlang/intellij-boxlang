@@ -265,14 +265,19 @@ public class BoxLangDapService implements Disposable {
      * Sends an attach request to connect to an already-running BoxLang process via JDWP.
      * The bx-debugger will use JDI SocketAttach to connect to the target VM's JDWP agent.
      *
+     * @param host       optional host of the target VM
      * @param serverPort the JDWP port on the target VM
      * @param localRoot  optional local filesystem root for path mapping (may be null)
      * @param remoteRoot optional remote filesystem root for path mapping (may be null)
      */
-    public CompletableFuture<Void> attach(int serverPort, @Nullable String localRoot,
+    public CompletableFuture<Void> attach(@Nullable String host, int serverPort, @Nullable String localRoot,
                                            @Nullable String remoteRoot) {
         Map<String, Object> attachArgs = new HashMap<>();
         attachArgs.put("serverPort", serverPort);
+        if (host != null && !host.isBlank()) {
+            attachArgs.put("host", host);
+            attachArgs.put("serverHost", host);
+        }
 
         if (localRoot != null && !localRoot.isBlank()) {
             attachArgs.put("localRoot", localRoot);

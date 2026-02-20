@@ -165,6 +165,7 @@ public class BoxLangDapServiceTest extends BasePlatformTestCase {
         
         // All these operations should return failed futures when not connected
         assertTrue(service.launch("/path/to/script.bx", null, null, false).isCompletedExceptionally());
+        assertTrue(service.attach("localhost", 5005, null, null).isCompletedExceptionally());
         assertTrue(service.configurationDone().isCompletedExceptionally());
         assertTrue(service.setBreakpoints("/path/to/script.bx", java.util.List.of()).isCompletedExceptionally());
         assertTrue(service.threads().isCompletedExceptionally());

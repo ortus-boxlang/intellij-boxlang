@@ -4,6 +4,7 @@ import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.xdebugger.XDebugProcess;
@@ -27,6 +28,7 @@ import java.util.function.Function;
  */
 public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapService.DapEventListener {
     private static final Logger LOG = Logger.getInstance(BoxLangDebugProcess.class);
+    private static final int MAX_CONFIGURATION_ATTEMPTS = 2;
 
     private final BoxLangDapService dapService;
     private final BoxLangBreakpointHandler breakpointHandler;
@@ -40,6 +42,7 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     // Attach mode parameters
     private final boolean attachMode;
+    private final String attachHost;
     private final int attachPort;
     private final String localRoot;
     private final String remoteRoot;
@@ -58,6 +61,8 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     // Track whether we've already completed configuration (prevent double calls)
     private volatile boolean configurationCompleted = false;
+    private volatile boolean configurationInProgress = false;
+    private volatile int configurationAttempts = 0;
 
     // Track run-to-cursor state: the file path where we set the temporary breakpoint
     private volatile String runToCursorFilePath = null;
@@ -71,7 +76,7 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
                                 @Nullable String workingDirectory,
                                 @Nullable List<String> programArgs) {
         this(session, dapService, scriptPath, workingDirectory, programArgs,
-             false, 0, null, null);
+             false, null, 0, null, null);
     }
 
     /**
@@ -79,11 +84,12 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
      */
     public static BoxLangDebugProcess createAttachProcess(@NotNull XDebugSession session,
                                                            @NotNull BoxLangDapService dapService,
+                                                           @Nullable String attachHost,
                                                            int attachPort,
                                                            @Nullable String localRoot,
                                                            @Nullable String remoteRoot) {
         return new BoxLangDebugProcess(session, dapService, null, null, null,
-                true, attachPort, localRoot, remoteRoot);
+                true, attachHost, attachPort, localRoot, remoteRoot);
     }
 
     private BoxLangDebugProcess(@NotNull XDebugSession session,
@@ -92,6 +98,7 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
                                  @Nullable String workingDirectory,
                                  @Nullable List<String> programArgs,
                                  boolean attachMode,
+                                 @Nullable String attachHost,
                                  int attachPort,
                                  @Nullable String localRoot,
                                  @Nullable String remoteRoot) {
@@ -101,6 +108,7 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
         this.workingDirectory = workingDirectory;
         this.programArgs = programArgs;
         this.attachMode = attachMode;
+        this.attachHost = attachHost;
         this.attachPort = attachPort;
         this.localRoot = localRoot;
         this.remoteRoot = remoteRoot;
@@ -181,23 +189,45 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
      * 3. configurationDone
      */
     private synchronized void completeConfiguration() {
-        if (configurationCompleted) {
+        if (configurationCompleted || configurationInProgress) {
             return;
         }
-        configurationCompleted = true;
+        if (configurationAttempts >= MAX_CONFIGURATION_ATTEMPTS) {
+            LOG.error("Exceeded maximum DAP configuration attempts");
+            return;
+        }
+        configurationInProgress = true;
+        configurationAttempts++;
 
         breakpointHandler.syncAllBreakpoints()
             .thenCompose(v -> {
                 if (attachMode) {
-                    return dapService.attach(attachPort, localRoot, remoteRoot);
+                    return dapService.attach(attachHost, attachPort, localRoot, remoteRoot);
                 } else {
                     return dapService.launch(scriptPath, workingDirectory, programArgs, false);
                 }
             })
             .thenCompose(v -> dapService.configurationDone())
-            .thenRun(breakpointHandler::markConfigurationComplete)
+            .thenRun(() -> {
+                synchronized (this) {
+                    configurationInProgress = false;
+                    configurationCompleted = true;
+                }
+                breakpointHandler.markConfigurationComplete();
+            })
             .exceptionally(ex -> {
-                LOG.error("Failed to complete DAP configuration", ex);
+                boolean shouldRetry;
+                synchronized (this) {
+                    configurationInProgress = false;
+                    shouldRetry = !configurationCompleted && configurationAttempts < MAX_CONFIGURATION_ATTEMPTS
+                            && sessionReady && dapInitialized;
+                }
+                if (shouldRetry) {
+                    LOG.warn("DAP configuration attempt failed, retrying", ex);
+                    ApplicationManager.getApplication().invokeLater(this::completeConfiguration);
+                } else {
+                    LOG.error("Failed to complete DAP configuration", ex);
+                }
                 return null;
             });
     }
@@ -355,7 +385,7 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
         String normalizedLocalRoot = FileUtil.toSystemIndependentName(localRoot);
         String normalizedRemoteRoot = FileUtil.toSystemIndependentName(remoteRoot);
-        if (!normalizedSourcePath.startsWith(normalizedRemoteRoot)) {
+        if (!isPathWithinRoot(normalizedSourcePath, normalizedRemoteRoot)) {
             return normalizedSourcePath;
         }
 
@@ -364,6 +394,28 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
             suffix = "/" + suffix;
         }
         return normalizedLocalRoot + suffix;
+    }
+
+    private boolean isPathWithinRoot(@NotNull String path, @NotNull String root) {
+        if (SystemInfo.isWindows) {
+            String lowerPath = path.toLowerCase();
+            String lowerRoot = root.toLowerCase();
+            return isPathWithinRootCaseSensitive(lowerPath, lowerRoot);
+        }
+        return isPathWithinRootCaseSensitive(path, root);
+    }
+
+    private boolean isPathWithinRootCaseSensitive(@NotNull String path, @NotNull String root) {
+        if (path.equals(root)) {
+            return true;
+        }
+        if (!path.startsWith(root)) {
+            return false;
+        }
+        if (root.endsWith("/")) {
+            return true;
+        }
+        return path.length() > root.length() && path.charAt(root.length()) == '/';
     }
 
     private int getThreadId(@Nullable XSuspendContext context) {
