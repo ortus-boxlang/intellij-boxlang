@@ -13,10 +13,10 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 | 3 | DAP Client Infrastructure | ✅ Complete |
 | 4 | Breakpoint Support | ✅ Complete |
 | 5 | Debug Process Core | ✅ Complete |
-| 6 | Execution Suspension & Stack Frames | Pending |
-| 7 | Variables Display | Pending |
-| 8 | Stepping Controls | Pending |
-| 9 | Watch Expressions & Evaluation | Pending |
+| 6 | Execution Suspension & Stack Frames | ✅ Complete |
+| 7 | Variables Display | ✅ Complete |
+| 8 | Stepping Controls | ✅ Complete |
+| 9 | Watch Expressions & Evaluation | ✅ Complete |
 | 10 | Console Integration | Pending |
 
 **Branch:** `debugger`
@@ -30,6 +30,8 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 - `c898c9d` - Implement Phase 3: DAP client infrastructure
 - `4c2b357` - Implement Phase 4: Breakpoint support
 - `b96c4f6` - Fix breakpoint icons to use standard red dots
+- `b9664f8` - Implement Phase 5: Debug process core
+- `4cf9d76` - Implement Phase 6-8: Stack frames, variables, stepping, session lifecycle fix
 
 ---
 
@@ -242,7 +244,7 @@ dependencies {
 
 **Goal:** When a breakpoint is hit, show the suspended state with call stack.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
 ### Tasks
 
@@ -258,14 +260,25 @@ dependencies {
 #### 6.4 Handle DAP stopped Event
 Update `BoxLangDapClient` to handle `stopped` events and create suspend context.
 
+#### 6.5 Debug Session Lifecycle Fix
+Created `BoxLangDapProcessHandler` to keep the debug session alive until DAP `terminated`/`exited` events, fixing premature session termination for fast scripts.
+
+**Key Discovery:** `positionReached()` must be called on the EDT via `invokeLater()` for IntelliJ to properly activate debug toolbar buttons.
+
+### Files Created/Modified:
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangSuspendContext.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangExecutionStack.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangStackFrame.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapProcessHandler.java`
+
 ### Testing Criteria
 
 | Test | Expected Result |
 |------|-----------------|
-| Hit breakpoint | Execution pauses at breakpoint line |
-| Editor highlight | Current line highlighted in yellow |
-| Frames panel | Shows call stack with function names |
-| Click stack frame | Editor navigates to that frame's location |
+| Hit breakpoint | ✅ Execution pauses at breakpoint line |
+| Editor highlight | ✅ Current line highlighted in yellow |
+| Frames panel | ✅ Shows call stack with function names |
+| Click stack frame | ✅ Editor navigates to that frame's location |
 
 ---
 
@@ -273,28 +286,27 @@ Update `BoxLangDapClient` to handle `stopped` events and create suspend context.
 
 **Goal:** Show variables and their values when suspended.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
 ### Tasks
 
-#### 7.1 Create Debug Value
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangValue.java`
-
-#### 7.2 Create Named Value
+#### 7.1 Create Named Value
 **File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangNamedValue.java`
 
-#### 7.3 Update Stack Frame
-Update `BoxLangStackFrame.computeChildren()` to fetch and display variables.
+Displays variables with name, type, value and supports expandable children for objects/arrays/structs via recursive DAP `variables` requests.
+
+#### 7.2 Update Stack Frame
+`BoxLangStackFrame.computeChildren()` fetches scopes via DAP `scopes` request, then fetches variables for each scope via DAP `variables` request.
 
 ### Testing Criteria
 
 | Test | Expected Result |
 |------|-----------------|
-| Variables panel | Shows local variables |
-| Variable types | Type shown for each variable |
-| Variable values | Current value displayed |
-| Expand object | Shows object properties |
-| Expand array | Shows array elements |
+| Variables panel | ✅ Shows local variables |
+| Variable types | ✅ Type shown for each variable |
+| Variable values | ✅ Current value displayed |
+| Expand object | ✅ Shows object properties |
+| Expand array | ✅ Shows array elements |
 
 ---
 
@@ -302,24 +314,26 @@ Update `BoxLangStackFrame.computeChildren()` to fetch and display variables.
 
 **Goal:** Implement step over, step into, step out, and resume.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
 ### Tasks
 
-- Implement Step Over (`next` DAP request)
-- Implement Step Into (`stepIn` DAP request)
-- Implement Step Out (`stepOut` DAP request)
-- Implement Resume (`continue` DAP request)
-- Handle DAP `continued` event
+- ✅ Implement Step Over (`next` DAP request)
+- ✅ Implement Step Into (`stepIn` DAP request)
+- ✅ Implement Step Out (`stepOut` DAP request)
+- ✅ Implement Resume (`continue` DAP request)
+- ✅ Handle DAP `continued` event
+
+All stepping operations are wired in `BoxLangDebugProcess` and send the appropriate DAP requests via `BoxLangDapService`.
 
 ### Testing Criteria
 
 | Test | Expected Result |
 |------|-----------------|
-| Step Over (F8) | Moves to next line, skips function internals |
-| Step Into (F7) | Enters function call |
-| Step Out (Shift+F8) | Exits current function, stops at caller |
-| Resume (F9) | Continues until next breakpoint or end |
+| Step Over (F8) | ✅ Moves to next line, skips function internals |
+| Step Into (F7) | ✅ Enters function call |
+| Step Out (Shift+F8) | ✅ Exits current function, stops at caller |
+| Resume (F9) | ✅ Continues until next breakpoint or end |
 
 ---
 
@@ -327,18 +341,20 @@ Update `BoxLangStackFrame.computeChildren()` to fetch and display variables.
 
 **Goal:** Allow users to evaluate expressions during debugging.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
 ### Tasks
 
 #### 9.1 Create Evaluator
 **File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangEvaluator.java`
 
-#### 9.2 Implement Expression Evaluation
-Use DAP `evaluate` request.
+Sends DAP `evaluate` requests with the expression and current frame ID. Results are wrapped in `EvaluateResultValue` (inner XValue class) which supports expandable children for complex results.
 
-#### 9.3 Update Editors Provider
-Ensure proper document creation for evaluate dialog.
+#### 9.2 Wire Evaluator into Stack Frame
+`BoxLangStackFrame.getEvaluator()` returns a `BoxLangEvaluator` bound to the current frame, enabling watch expressions and the Evaluate Expression dialog.
+
+#### 9.3 Editors Provider
+`BoxLangDebuggerEditorsProvider` provides BoxLang file type context for expression editing in watch windows and evaluate dialogs, returned via `BoxLangDebugProcess.getEditorsProvider()`.
 
 ### Testing Criteria
 
@@ -380,16 +396,17 @@ src/main/java/com/ortussolutions/intellijboxlang/
 ├── debug/
 │   ├── BoxLangDapService.java           # DAP client service
 │   ├── BoxLangDapClient.java            # DAP client callbacks
+│   ├── BoxLangDapProcessHandler.java    # Custom ProcessHandler for DAP lifecycle
 │   ├── BoxLangDebugRunner.java          # Debug program runner
 │   ├── BoxLangDebugProcess.java         # XDebugProcess implementation
 │   ├── BoxLangSuspendContext.java       # Suspend context
 │   ├── BoxLangExecutionStack.java       # Call stack
-│   ├── BoxLangStackFrame.java           # Stack frame
-│   ├── BoxLangValue.java                # Debug values
-│   ├── BoxLangNamedValue.java           # Named debug values
-│   ├── BoxLangEvaluator.java            # Expression evaluator
+│   ├── BoxLangStackFrame.java           # Stack frame with evaluator
+│   ├── BoxLangNamedValue.java           # Named debug values (expandable)
+│   ├── BoxLangEvaluator.java            # Expression evaluator (DAP evaluate)
 │   ├── BoxLangLineBreakpointType.java   # Breakpoint type
 │   ├── BoxLangBreakpointHandler.java    # Breakpoint handler
+│   ├── BoxLangBreakpointProperties.java # Breakpoint properties
 │   └── BoxLangDebuggerEditorsProvider.java # Expression editors
 ├── run/
 │   ├── BoxLangConfigurationType.java    # Run config type

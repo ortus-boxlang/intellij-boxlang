@@ -7,6 +7,7 @@ import com.intellij.ui.ColoredTextContainer;
 import com.intellij.ui.SimpleTextAttributes;
 import com.intellij.xdebugger.XDebuggerUtil;
 import com.intellij.xdebugger.XSourcePosition;
+import com.intellij.xdebugger.evaluation.XDebuggerEvaluator;
 import com.intellij.xdebugger.frame.XCompositeNode;
 import com.intellij.xdebugger.frame.XStackFrame;
 import com.intellij.xdebugger.frame.XValueChildrenList;
@@ -47,6 +48,11 @@ public class BoxLangStackFrame extends XStackFrame {
     @Override
     public @Nullable XSourcePosition getSourcePosition() {
         return sourcePosition;
+    }
+
+    @Override
+    public @Nullable XDebuggerEvaluator getEvaluator() {
+        return new BoxLangEvaluator(debugProcess, dapFrame.getId());
     }
 
     @Override
