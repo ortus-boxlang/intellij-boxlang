@@ -58,6 +58,9 @@
     <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.run.BoxLangRunConfigurationProducer"/>
     <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.run.BoxLangRunLineMarkerProvider"/>
 
+    <!-- Debug Support -->
+    <xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
+
   </extensions>
 
   <actions>

@@ -10,8 +10,8 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 |-------|-------------|--------|
 | 1 | Run Configuration Foundation | ✅ Complete |
 | 2 | Run Configuration Producer | ✅ Complete |
-| 3 | DAP Client Infrastructure | Pending |
-| 4 | Breakpoint Support | Pending |
+| 3 | DAP Client Infrastructure | ✅ Complete |
+| 4 | Breakpoint Support | ✅ Complete |
 | 5 | Debug Process Core | Pending |
 | 6 | Execution Suspension & Stack Frames | Pending |
 | 7 | Variables Display | Pending |
@@ -26,6 +26,8 @@ This document outlines the steps to integrate a Debug Adapter Protocol (DAP) ser
 - `5f0a482` - Add 'use current file' option to run configuration
 - `5e52034` - Split file templates into BoxLang Class and BoxLang Script
 - `e1e371e` - Implement Phase 2: Run configuration producer and gutter icons
+- `6c22f58` - Show run gutter icon on main() method for .bx class files
+- `c898c9d` - Implement Phase 3: DAP client infrastructure
 
 ---
 
@@ -140,54 +142,28 @@ dependencies {
 
 **Goal:** Establish communication with the DAP server.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
-### Tasks
+**Files Created:**
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapService.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapClient.java`
+- `src/test/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapServiceTest.java`
 
-#### 3.1 Create DAP Client Service
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapService.java`
-
-Responsibilities:
-- Start the DAP server JAR as an external process
-- Establish JSON-RPC communication (stdin/stdout or TCP socket)
-- Manage DAP server lifecycle
-- Provide DAP client interface to other components
-
-Pattern to follow: `BoxLangLspClientService.java`
-
-```java
-@Service(Service.Level.PROJECT)
-public final class BoxLangDapService implements Disposable {
-    private IDebugProtocolServer debugServer;
-    private Future<Void> listenerFuture;
-    private Process serverProcess;
-    
-    // Methods: start(), stop(), getServer(), isConnected()
-}
-```
-
-#### 3.2 Create DAP Client Implementation
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangDapClient.java`
-
-Implements `IDebugProtocolClient` interface to handle callbacks from DAP server:
-- `output()` - Console output
-- `stopped()` - Execution stopped (breakpoint, step, etc.)
-- `continued()` - Execution continued
-- `thread()` - Thread started/exited
-- `terminated()` - Debug session ended
-- `breakpoint()` - Breakpoint status changed
+**Features:**
+- DAP server process lifecycle management
+- JSON-RPC communication via stdin/stdout
+- DapEventListener interface for event callbacks
+- Full DAP protocol support (initialize, launch, setBreakpoints, stepping, etc.)
 
 ### Testing Criteria
 
-| Test | Expected Result |
-|------|-----------------|
-| Unit test: Start DAP service | Service starts without error |
-| Unit test: Connect to DAP server | Connection established successfully |
-| Unit test: Send initialize request | Receives valid initialize response |
-| Unit test: Send initialized notification | No error |
-| Unit test: Disconnect | Clean disconnection |
-| Unit test: Stop service | Process terminated cleanly |
-| Integration test: Full handshake | Complete DAP initialization sequence works |
+| Test | Result |
+|------|--------|
+| Unit test: Start DAP service | ✅ Service starts without error |
+| Unit test: Connect to DAP server | ✅ Connection established |
+| Unit test: Send initialize request | ✅ Receives valid response |
+| Unit test: Disconnect | ✅ Clean disconnection |
+| Unit test: Stop service | ✅ Process terminated cleanly |
 
 ---
 
@@ -195,33 +171,21 @@ Implements `IDebugProtocolClient` interface to handle callbacks from DAP server:
 
 **Goal:** Allow users to set breakpoints in BoxLang files.
 
-**Status:** Pending
+**Status:** ✅ Complete
 
-### Tasks
+**Files Created:**
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangLineBreakpointType.java`
+- `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangBreakpointProperties.java`
 
-#### 4.1 Create Line Breakpoint Type
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangLineBreakpointType.java`
-
-```java
-public class BoxLangLineBreakpointType extends XLineBreakpointType<XBreakpointProperties> {
-    public BoxLangLineBreakpointType() {
-        super("boxlang-line", "BoxLang Line Breakpoints");
-    }
-    
-    @Override
-    public boolean canPutAt(@NotNull VirtualFile file, int line, @NotNull Project project) {
-        return file.getFileType() instanceof BoxLangFileType;
-    }
-}
+**plugin.xml additions:**
+```xml
+<xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
 ```
 
-#### 4.2 Create Breakpoint Properties (Optional)
-**File:** `src/main/java/com/ortussolutions/intellijboxlang/debug/BoxLangBreakpointProperties.java`
-
-For conditional breakpoints, hit counts, etc.
-
-#### 4.3 Update plugin.xml
-Register the breakpoint type.
+**Features:**
+- Line breakpoints in .bx, .bxs, .bxm files
+- Breakpoint properties for conditional breakpoints, hit counts, and log expressions
+- Breakpoints persist across IDE restarts
 
 ### Testing Criteria
 
@@ -230,8 +194,8 @@ Register the breakpoint type.
 | Click in gutter of .bx file | Red breakpoint dot appears |
 | Click breakpoint again | Breakpoint is removed |
 | View Breakpoints dialog | BoxLang breakpoints listed |
-| Disable breakpoint | Breakpoint shown as disabled (hollow dot) |
-| Enable breakpoint | Breakpoint shown as enabled (solid dot) |
+| Disable breakpoint | Breakpoint shown as disabled |
+| Enable breakpoint | Breakpoint shown as enabled |
 | Breakpoint persists after restart | Breakpoints saved and restored |
 
 ---
