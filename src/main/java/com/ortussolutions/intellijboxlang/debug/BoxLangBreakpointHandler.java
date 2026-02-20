@@ -2,12 +2,14 @@ package com.ortussolutions.intellijboxlang.debug;
 
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.xdebugger.XExpression;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.breakpoints.XBreakpointHandler;
 import com.intellij.xdebugger.breakpoints.XLineBreakpoint;
 import org.eclipse.lsp4j.debug.SetBreakpointsResponse;
 import org.eclipse.lsp4j.debug.SourceBreakpoint;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -79,6 +81,97 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
     }
 
     /**
+     * Builds a DAP SourceBreakpoint from an IntelliJ XLineBreakpoint.
+     * Reads condition, log expression from IntelliJ's built-in breakpoint UI fields
+     * (XBreakpoint.getConditionExpression() and XBreakpoint.getLogExpressionObject()),
+     * NOT from BoxLangBreakpointProperties which are never populated by the UI.
+     * 
+     * @return The SourceBreakpoint, or null if the breakpoint is disabled or has no position.
+     */
+    @Nullable
+    private SourceBreakpoint buildSourceBreakpoint(@NotNull XLineBreakpoint<BoxLangBreakpointProperties> bp) {
+        if (!bp.isEnabled()) {
+            return null;
+        }
+
+        XSourcePosition pos = bp.getSourcePosition();
+        if (pos == null) {
+            return null;
+        }
+
+        SourceBreakpoint sourceBreakpoint = new SourceBreakpoint();
+        // DAP uses 1-based line numbers, IntelliJ uses 0-based
+        sourceBreakpoint.setLine(pos.getLine() + 1);
+
+        // Read condition from IntelliJ's built-in breakpoint condition field.
+        // This is what the user edits via the breakpoint popup / "More" dialog.
+        XExpression conditionExpr = bp.getConditionExpression();
+        if (conditionExpr != null) {
+            String condition = conditionExpr.getExpression();
+            if (condition != null && !condition.isBlank()) {
+                sourceBreakpoint.setCondition(condition);
+            }
+        }
+
+        // Read log expression from IntelliJ's built-in "Evaluate and log" field.
+        // When the breakpoint's suspend policy is NONE, IntelliJ treats it as a
+        // "log breakpoint" (tracepoint) — the log expression is what gets logged.
+        XExpression logExpr = bp.getLogExpressionObject();
+        if (logExpr != null) {
+            String logExpression = logExpr.getExpression();
+            if (logExpression != null && !logExpression.isBlank()) {
+                sourceBreakpoint.setLogMessage(logExpression);
+            }
+        }
+
+        return sourceBreakpoint;
+    }
+
+    /**
+     * Collects enabled DAP breakpoints for a file.
+     */
+    @NotNull
+    private List<SourceBreakpoint> collectDapBreakpoints(@Nullable Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints) {
+        List<SourceBreakpoint> dapBreakpoints = new ArrayList<>();
+        if (fileBreakpoints != null) {
+            for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
+                SourceBreakpoint sbp = buildSourceBreakpoint(bp);
+                if (sbp != null) {
+                    dapBreakpoints.add(sbp);
+                }
+            }
+        }
+        return dapBreakpoints;
+    }
+
+    /**
+     * Collects enabled DAP SourceBreakpoints for a given file path.
+     * Used by BoxLangDebugProcess for run-to-cursor to preserve existing breakpoints
+     * when adding a temporary one (since DAP setBreakpoints replaces all breakpoints for a file).
+     */
+    @NotNull
+    public List<SourceBreakpoint> collectDapBreakpointsForFile(@NotNull String filePath) {
+        return collectDapBreakpoints(breakpointsByFile.get(filePath));
+    }
+
+    /**
+     * Logs the breakpoints about to be sent.
+     */
+    private void logBreakpoints(@NotNull String filePath, @NotNull List<SourceBreakpoint> dapBreakpoints) {
+        LOG.info("Sending " + dapBreakpoints.size() + " breakpoints for file: " + filePath);
+        for (SourceBreakpoint sbp : dapBreakpoints) {
+            StringBuilder info = new StringBuilder("  Line " + sbp.getLine());
+            if (sbp.getCondition() != null) {
+                info.append(" [condition: ").append(sbp.getCondition()).append("]");
+            }
+            if (sbp.getLogMessage() != null) {
+                info.append(" [log: ").append(sbp.getLogMessage()).append("]");
+            }
+            LOG.info(info.toString());
+        }
+    }
+
+    /**
      * Sends all breakpoints for a given file to the DAP server.
      */
     private void sendBreakpointsToServer(@NotNull String filePath) {
@@ -88,51 +181,8 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
             return;
         }
 
-        Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
-        List<SourceBreakpoint> dapBreakpoints = new ArrayList<>();
-
-        if (fileBreakpoints != null) {
-            for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
-                if (!bp.isEnabled()) {
-                    continue;
-                }
-                
-                XSourcePosition pos = bp.getSourcePosition();
-                if (pos == null) {
-                    continue;
-                }
-
-                SourceBreakpoint sourceBreakpoint = new SourceBreakpoint();
-                // DAP uses 1-based line numbers, IntelliJ uses 0-based
-                sourceBreakpoint.setLine(pos.getLine() + 1);
-                
-                // Handle conditional breakpoints
-                BoxLangBreakpointProperties props = bp.getProperties();
-                if (props != null) {
-                    String condition = props.getCondition();
-                    if (condition != null && !condition.isBlank()) {
-                        sourceBreakpoint.setCondition(condition);
-                    }
-                    
-                    int hitCount = props.getHitCount();
-                    if (hitCount > 0) {
-                        sourceBreakpoint.setHitCondition(String.valueOf(hitCount));
-                    }
-                    
-                    String logExpression = props.getLogExpression();
-                    if (logExpression != null && !logExpression.isBlank()) {
-                        sourceBreakpoint.setLogMessage(logExpression);
-                    }
-                }
-                
-                dapBreakpoints.add(sourceBreakpoint);
-            }
-        }
-
-        LOG.info("Sending " + dapBreakpoints.size() + " breakpoints for file: " + filePath);
-        for (SourceBreakpoint sbp : dapBreakpoints) {
-            LOG.info("  Line " + sbp.getLine() + (sbp.getCondition() != null ? " [condition: " + sbp.getCondition() + "]" : ""));
-        }
+        List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints(breakpointsByFile.get(filePath));
+        logBreakpoints(filePath, dapBreakpoints);
         
         dapService.setBreakpoints(filePath, dapBreakpoints)
             .thenAccept(response -> handleSetBreakpointsResponse(filePath, response))
@@ -243,51 +293,8 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
             return null;
         }
 
-        Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
-        List<SourceBreakpoint> dapBreakpoints = new ArrayList<>();
-
-        if (fileBreakpoints != null) {
-            for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
-                if (!bp.isEnabled()) {
-                    continue;
-                }
-                
-                XSourcePosition pos = bp.getSourcePosition();
-                if (pos == null) {
-                    continue;
-                }
-
-                SourceBreakpoint sourceBreakpoint = new SourceBreakpoint();
-                // DAP uses 1-based line numbers, IntelliJ uses 0-based
-                sourceBreakpoint.setLine(pos.getLine() + 1);
-                
-                // Handle conditional breakpoints
-                BoxLangBreakpointProperties props = bp.getProperties();
-                if (props != null) {
-                    String condition = props.getCondition();
-                    if (condition != null && !condition.isBlank()) {
-                        sourceBreakpoint.setCondition(condition);
-                    }
-                    
-                    int hitCount = props.getHitCount();
-                    if (hitCount > 0) {
-                        sourceBreakpoint.setHitCondition(String.valueOf(hitCount));
-                    }
-                    
-                    String logExpression = props.getLogExpression();
-                    if (logExpression != null && !logExpression.isBlank()) {
-                        sourceBreakpoint.setLogMessage(logExpression);
-                    }
-                }
-                
-                dapBreakpoints.add(sourceBreakpoint);
-            }
-        }
-
-        LOG.info("Sending " + dapBreakpoints.size() + " breakpoints for file: " + filePath);
-        for (SourceBreakpoint sbp : dapBreakpoints) {
-            LOG.info("  Line " + sbp.getLine() + (sbp.getCondition() != null ? " [condition: " + sbp.getCondition() + "]" : ""));
-        }
+        List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints(breakpointsByFile.get(filePath));
+        logBreakpoints(filePath, dapBreakpoints);
         
         return dapService.setBreakpoints(filePath, dapBreakpoints)
             .thenAccept(response -> handleSetBreakpointsResponse(filePath, response))

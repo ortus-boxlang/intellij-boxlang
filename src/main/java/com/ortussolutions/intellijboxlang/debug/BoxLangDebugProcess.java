@@ -4,6 +4,7 @@ import com.intellij.execution.process.ProcessHandler;
 import com.intellij.execution.ui.ExecutionConsole;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.diagnostic.Logger;
+import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XSourcePosition;
@@ -14,6 +15,7 @@ import org.eclipse.lsp4j.debug.*;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -47,6 +49,10 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
     
     // Track whether we've already completed configuration (prevent double calls)
     private volatile boolean configurationCompleted = false;
+    
+    // Track run-to-cursor state: the file path and line where we set the temporary breakpoint
+    private volatile String runToCursorFilePath = null;
+    private volatile int runToCursorLine = -1; // 1-based DAP line number
 
     public BoxLangDebugProcess(@NotNull XDebugSession session,
                                 @NotNull BoxLangDapService dapService,
@@ -250,8 +256,45 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
     @Override
     public void runToPosition(@NotNull XSourcePosition position, @Nullable XSuspendContext context) {
-        // TODO: Implement run to cursor using temporary breakpoint
-        LOG.info("Run to position not yet implemented");
+        VirtualFile file = position.getFile();
+        String filePath = file.getPath();
+        int dapLine = position.getLine() + 1; // Convert 0-based to 1-based
+        
+        LOG.info("Run to cursor: " + filePath + ":" + dapLine);
+        
+        // Build the list of breakpoints for this file: existing user breakpoints + temporary one
+        List<SourceBreakpoint> allBreakpoints = new ArrayList<>();
+        
+        // Include existing user breakpoints for this file so they aren't lost
+        // (DAP setBreakpoints is a full replacement for the file)
+        allBreakpoints.addAll(breakpointHandler.collectDapBreakpointsForFile(filePath));
+        
+        // Add the temporary run-to-cursor breakpoint
+        SourceBreakpoint tempBreakpoint = new SourceBreakpoint();
+        tempBreakpoint.setLine(dapLine);
+        allBreakpoints.add(tempBreakpoint);
+        
+        // Track the run-to-cursor target so onStopped can clean it up
+        runToCursorFilePath = filePath;
+        runToCursorLine = dapLine;
+        
+        // Send all breakpoints (existing + temporary) and then resume
+        dapService.setBreakpoints(filePath, allBreakpoints)
+            .thenCompose(response -> {
+                LOG.info("Run to cursor: temporary breakpoint set, resuming execution");
+                int threadId = getThreadId(context);
+                if (threadId != -1) {
+                    return dapService.continueExecution(threadId).thenApply(r -> null);
+                }
+                return java.util.concurrent.CompletableFuture.<Void>completedFuture(null);
+            })
+            .exceptionally(ex -> {
+                LOG.warn("Run to cursor failed", ex);
+                // Clean up run-to-cursor state on failure
+                runToCursorFilePath = null;
+                runToCursorLine = -1;
+                return null;
+            });
     }
 
     // DAP Event Handlers
@@ -278,6 +321,23 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
         
         int threadId = args.getThreadId() != null ? args.getThreadId() : 1;
         activeThreadId = threadId;
+        
+        // Check if this stop is from a run-to-cursor temporary breakpoint.
+        // If so, clean up by restoring the original breakpoints for the file.
+        if (runToCursorFilePath != null) {
+            String rtcFilePath = runToCursorFilePath;
+            runToCursorFilePath = null;
+            runToCursorLine = -1;
+            
+            LOG.info("Cleaning up run-to-cursor temporary breakpoint for: " + rtcFilePath);
+            // Restore original breakpoints (without the temporary one) by re-syncing
+            List<SourceBreakpoint> originalBreakpoints = breakpointHandler.collectDapBreakpointsForFile(rtcFilePath);
+            dapService.setBreakpoints(rtcFilePath, originalBreakpoints)
+                .exceptionally(ex -> {
+                    LOG.warn("Failed to restore breakpoints after run-to-cursor for " + rtcFilePath, ex);
+                    return null;
+                });
+        }
         
         // Fetch stack trace from DAP server before creating the suspend context.
         // This ensures IntelliJ has real stack frames to display in the Frames panel
