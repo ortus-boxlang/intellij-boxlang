@@ -43,3 +43,12 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Certificates and secrets ###
+*.pem
+*.key
+*.crt
+*.cert
+*.srl
+*.p12
+*.jks
