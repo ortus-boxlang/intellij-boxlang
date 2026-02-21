@@ -17,56 +17,57 @@ import com.ortussolutions.intellijboxlang.lexer.BoxLangTokenTypes;
 import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangParserDefinition implements ParserDefinition {
-    private static final TokenSet COMMENTS = TokenSet.create(
-        BoxLangTokenTypes.LINE_COMMENT,
-        BoxLangTokenTypes.BLOCK_COMMENT
-    );
-    private static final TokenSet STRINGS = TokenSet.create(BoxLangTokenTypes.STRING);
 
-    @Override
-    public @NotNull Lexer createLexer(Project project) {
-        return new BoxLangLexer();
-    }
+	private static final TokenSet	COMMENTS	= TokenSet.create(
+	    BoxLangTokenTypes.LINE_COMMENT,
+	    BoxLangTokenTypes.BLOCK_COMMENT
+	);
+	private static final TokenSet	STRINGS		= TokenSet.create( BoxLangTokenTypes.STRING );
 
-    @Override
-    public @NotNull PsiParser createParser(Project project) {
-        return (root, builder) -> {
-            var rootNode = builder.mark();
-            while (!builder.eof()) {
-                builder.advanceLexer();
-            }
-            rootNode.done(root);
-            return builder.getTreeBuilt();
-        };
-    }
+	@Override
+	public @NotNull Lexer createLexer( Project project ) {
+		return new BoxLangLexer();
+	}
 
-    @Override
-    public @NotNull IFileElementType getFileNodeType() {
-        return BoxLangFileElementType.INSTANCE;
-    }
+	@Override
+	public @NotNull PsiParser createParser( Project project ) {
+		return ( root, builder ) -> {
+			var rootNode = builder.mark();
+			while ( !builder.eof() ) {
+				builder.advanceLexer();
+			}
+			rootNode.done( root );
+			return builder.getTreeBuilt();
+		};
+	}
 
-    @Override
-    public @NotNull TokenSet getCommentTokens() {
-        return COMMENTS;
-    }
+	@Override
+	public @NotNull IFileElementType getFileNodeType() {
+		return BoxLangFileElementType.INSTANCE;
+	}
 
-    @Override
-    public @NotNull TokenSet getStringLiteralElements() {
-        return STRINGS;
-    }
+	@Override
+	public @NotNull TokenSet getCommentTokens() {
+		return COMMENTS;
+	}
 
-    @Override
-    public @NotNull PsiElement createElement(ASTNode node) {
-        return new ASTWrapperPsiElement(node);
-    }
+	@Override
+	public @NotNull TokenSet getStringLiteralElements() {
+		return STRINGS;
+	}
 
-    @Override
-    public @NotNull PsiFile createFile(@NotNull FileViewProvider viewProvider) {
-        return new BoxLangFile(viewProvider);
-    }
+	@Override
+	public @NotNull PsiElement createElement( ASTNode node ) {
+		return new ASTWrapperPsiElement( node );
+	}
 
-    @Override
-    public @NotNull SpaceRequirements spaceExistenceTypeBetweenTokens(ASTNode left, ASTNode right) {
-        return SpaceRequirements.MAY;
-    }
+	@Override
+	public @NotNull PsiFile createFile( @NotNull FileViewProvider viewProvider ) {
+		return new BoxLangFile( viewProvider );
+	}
+
+	@Override
+	public @NotNull SpaceRequirements spaceExistenceTypeBetweenTokens( ASTNode left, ASTNode right ) {
+		return SpaceRequirements.MAY;
+	}
 }

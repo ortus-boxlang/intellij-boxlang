@@ -10,18 +10,18 @@ import org.jetbrains.annotations.Nullable;
 public final class BoxLangStructureViewModel extends StructureViewModelBase
     implements StructureViewModel.ElementInfoProvider {
 
-    public BoxLangStructureViewModel(PsiFile psiFile) {
-        super(psiFile, new BoxLangStructureViewRootElement(psiFile));
-        withSuitableClasses(PsiFile.class);
-    }
+	public BoxLangStructureViewModel( PsiFile psiFile ) {
+		super( psiFile, new BoxLangStructureViewRootElement( psiFile ) );
+		withSuitableClasses( PsiFile.class );
+	}
 
-    @Override
-    public boolean isAlwaysShowsPlus(StructureViewTreeElement element) {
-        return element instanceof BoxLangStructureViewRootElement;
-    }
+	@Override
+	public boolean isAlwaysShowsPlus( StructureViewTreeElement element ) {
+		return element instanceof BoxLangStructureViewRootElement;
+	}
 
-    @Override
-    public boolean isAlwaysLeaf(StructureViewTreeElement element) {
-        return element instanceof BoxLangStructureViewSymbolElement symbol && !symbol.hasChildren();
-    }
+	@Override
+	public boolean isAlwaysLeaf( StructureViewTreeElement element ) {
+		return element instanceof BoxLangStructureViewSymbolElement symbol && !symbol.hasChildren();
+	}
 }

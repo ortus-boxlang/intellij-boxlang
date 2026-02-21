@@ -9,34 +9,32 @@ import com.intellij.util.xmlb.XmlSerializerUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-@Service(Service.Level.APP)
-@State(
-    name = "BoxLangApplicationSettings",
-    storages = @Storage("boxlang.xml")
-)
+@Service( Service.Level.APP )
+@State( name = "BoxLangApplicationSettings", storages = @Storage( "boxlang.xml" ) )
 public final class BoxLangApplicationSettings implements PersistentStateComponent<BoxLangSettingsState> {
-    private final BoxLangSettingsState state = new BoxLangSettingsState();
 
-    public BoxLangApplicationSettings() {
-        state.boxLangVersion = "1.9.0";
-        state.lspVersion = "bx-lsp@1.5.0+6";
-    }
+	private final BoxLangSettingsState state = new BoxLangSettingsState();
 
-    public static BoxLangApplicationSettings getInstance() {
-        return ApplicationManager.getApplication().getService(BoxLangApplicationSettings.class);
-    }
+	public BoxLangApplicationSettings() {
+		state.boxLangVersion	= "1.9.0";
+		state.lspVersion		= "bx-lsp@1.5.0+6";
+	}
 
-    @Override
-    public @Nullable BoxLangSettingsState getState() {
-        return state;
-    }
+	public static BoxLangApplicationSettings getInstance() {
+		return ApplicationManager.getApplication().getService( BoxLangApplicationSettings.class );
+	}
 
-    @Override
-    public void loadState(@NotNull BoxLangSettingsState state) {
-        XmlSerializerUtil.copyBean(state, this.state);
-    }
+	@Override
+	public @Nullable BoxLangSettingsState getState() {
+		return state;
+	}
 
-    public BoxLangSettingsState getSettings() {
-        return state;
-    }
+	@Override
+	public void loadState( @NotNull BoxLangSettingsState state ) {
+		XmlSerializerUtil.copyBean( state, this.state );
+	}
+
+	public BoxLangSettingsState getSettings() {
+		return state;
+	}
 }

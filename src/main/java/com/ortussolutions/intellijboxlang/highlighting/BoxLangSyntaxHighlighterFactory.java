@@ -8,10 +8,10 @@ import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangSyntaxHighlighterFactory extends SyntaxHighlighterFactory {
 
-    @Override
-    @NotNull
-    public SyntaxHighlighter getSyntaxHighlighter(Project project, VirtualFile virtualFile) {
-        return new BoxLangSyntaxHighlighter();
-    }
+	@Override
+	@NotNull
+	public SyntaxHighlighter getSyntaxHighlighter( Project project, VirtualFile virtualFile ) {
+		return new BoxLangSyntaxHighlighter();
+	}
 
 }

@@ -10,27 +10,28 @@ import javax.swing.Icon;
 import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangFile extends PsiFileBase {
-    public BoxLangFile(@NotNull FileViewProvider viewProvider) {
-        super(viewProvider, BoxLangLanguage.INSTANCE);
-    }
 
-    @Override
-    public @NotNull IFileElementType getFileElementType() {
-        return BoxLangFileElementType.INSTANCE;
-    }
+	public BoxLangFile( @NotNull FileViewProvider viewProvider ) {
+		super( viewProvider, BoxLangLanguage.INSTANCE );
+	}
 
-    @Override
-    public @NotNull FileType getFileType() {
-        return BoxLangFileType.INSTANCE;
-    }
+	@Override
+	public @NotNull IFileElementType getFileElementType() {
+		return BoxLangFileElementType.INSTANCE;
+	}
 
-    @Override
-    public @NotNull String toString() {
-        return "BoxLang File";
-    }
+	@Override
+	public @NotNull FileType getFileType() {
+		return BoxLangFileType.INSTANCE;
+	}
 
-    @Override
-    public Icon getIcon(int flags) {
-        return BoxLangFileType.INSTANCE.getIcon();
-    }
+	@Override
+	public @NotNull String toString() {
+		return "BoxLang File";
+	}
+
+	@Override
+	public Icon getIcon( int flags ) {
+		return BoxLangFileType.INSTANCE.getIcon();
+	}
 }
