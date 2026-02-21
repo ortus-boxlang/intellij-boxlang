@@ -8,6 +8,7 @@ import com.intellij.openapi.util.Ref;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
+import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -79,16 +80,6 @@ public class BoxLangRunConfigurationProducer extends LazyRunConfigurationProduce
             return null;
         }
 
-        // Check if it's a BoxLang file
-        String ext = file.getExtension();
-        if (ext == null) {
-            return null;
-        }
-
-        if (ext.equalsIgnoreCase("bx") || ext.equalsIgnoreCase("bxm") || ext.equalsIgnoreCase("bxs")) {
-            return file;
-        }
-
-        return null;
+        return BoxLangFileUtil.isBoxLangFile(file) ? file : null;
     }
 }

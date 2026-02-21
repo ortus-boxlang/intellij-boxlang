@@ -16,6 +16,7 @@ import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugProcessStarter;
 import com.intellij.xdebugger.XDebugSession;
 import com.intellij.xdebugger.XDebuggerManager;
+import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import com.ortussolutions.intellijboxlang.run.BoxLangRunConfiguration;
 import com.ortussolutions.intellijboxlang.run.BoxLangRunProfileState;
 import org.jetbrains.annotations.NotNull;
@@ -132,10 +133,7 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
         VirtualFile currentFile = selectedFiles[0];
 
         // Verify it's a BoxLang file
-        String ext = currentFile.getExtension();
-        if (ext == null || (!ext.equalsIgnoreCase("bx")
-                && !ext.equalsIgnoreCase("bxm")
-                && !ext.equalsIgnoreCase("bxs"))) {
+        if (!BoxLangFileUtil.isBoxLangFile(currentFile)) {
             return null;
         }
 

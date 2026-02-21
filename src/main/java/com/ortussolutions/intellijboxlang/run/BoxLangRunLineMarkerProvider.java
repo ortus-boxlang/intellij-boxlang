@@ -4,11 +4,13 @@ import com.intellij.execution.lineMarker.ExecutorAction;
 import com.intellij.execution.lineMarker.RunLineMarkerContributor;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,7 +42,7 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
             return null;
         }
 
-        String lowerName = fileName.toLowerCase();
+        String lowerName = fileName.toLowerCase(Locale.ROOT);
         
         // For .bx (class) files, only show on the main method
         if (lowerName.endsWith(".bx")) {
@@ -75,7 +77,7 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
         int mainOffset = matcher.start();
         // Skip any leading whitespace in the match to get to "function" or modifier
         String match = matcher.group();
-        if (match.startsWith("\n") || match.startsWith(" ") || match.startsWith("\t")) {
+        if (!StringUtil.isEmpty(match) && Character.isWhitespace(match.charAt(0))) {
             mainOffset += 1;
         }
         
@@ -125,8 +127,14 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
     private int getLineNumber(String text, int offset) {
         int line = 0;
         for (int i = 0; i < offset && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
+            char c = text.charAt(i);
+            if (c == '\n') {
                 line++;
+            } else if (c == '\r') {
+                line++;
+                if (i + 1 < text.length() && text.charAt(i + 1) == '\n') {
+                    i++;
+                }
             }
         }
         return line;
@@ -140,9 +148,17 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
         int lineStart = 0;
         int currentLine = 0;
         for (int i = 0; i < text.length() && currentLine < targetLine; i++) {
-            if (text.charAt(i) == '\n') {
+            char c = text.charAt(i);
+            if (c == '\n') {
                 currentLine++;
                 lineStart = i + 1;
+            } else if (c == '\r') {
+                currentLine++;
+                lineStart = i + 1;
+                if (i + 1 < text.length() && text.charAt(i + 1) == '\n') {
+                    i++;
+                    lineStart = i + 1;
+                }
             }
         }
 
@@ -157,7 +173,7 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
             }
             if (c != ' ' && c != '\t') {
                 // Found non-whitespace before the element
-                return i == elementOffset;
+                return false;
             }
         }
         

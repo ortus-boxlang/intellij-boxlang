@@ -126,7 +126,7 @@ else
 fi
 
 exec "$JAVA_CMD" \
-    -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=0.0.0.0:"$JDWP_PORT" \
+    -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=localhost:"$JDWP_PORT" \
     -jar "$MINISERVER_JAR" \
     --webroot "$WEBROOT" \
     --debug

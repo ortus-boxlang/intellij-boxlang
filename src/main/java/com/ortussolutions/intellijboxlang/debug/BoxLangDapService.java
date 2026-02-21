@@ -48,10 +48,10 @@ public class BoxLangDapService implements Disposable {
     private final Project project;
     private final List<DapEventListener> eventListeners = new CopyOnWriteArrayList<>();
 
-    private Process serverProcess;
-    private Socket socket;
-    private IDebugProtocolServer debugServer;
-    private Capabilities serverCapabilities;
+    private volatile Process serverProcess;
+    private volatile Socket socket;
+    private volatile IDebugProtocolServer debugServer;
+    private volatile Capabilities serverCapabilities;
     private volatile boolean initialized = false;
     private volatile boolean configurationReady = false;
     private volatile boolean terminated = false;

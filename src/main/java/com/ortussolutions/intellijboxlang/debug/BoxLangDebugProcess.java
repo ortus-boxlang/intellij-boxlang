@@ -28,6 +28,7 @@ import java.util.function.Function;
  */
 public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapService.DapEventListener {
     private static final Logger LOG = Logger.getInstance(BoxLangDebugProcess.class);
+    // This process is created per debug session, so attempts reset naturally each session.
     private static final int MAX_CONFIGURATION_ATTEMPTS = 2;
 
     private final BoxLangDapService dapService;

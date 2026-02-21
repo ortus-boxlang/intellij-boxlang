@@ -18,6 +18,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.execution.ParametersListUtil;
+import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
@@ -186,10 +187,7 @@ public class BoxLangRunProfileState extends CommandLineState {
         VirtualFile currentFile = selectedFiles[0];
         
         // Verify it's a BoxLang file
-        String ext = currentFile.getExtension();
-        if (ext == null || (!ext.equalsIgnoreCase("bx") 
-                && !ext.equalsIgnoreCase("bxm") 
-                && !ext.equalsIgnoreCase("bxs"))) {
+        if (!BoxLangFileUtil.isBoxLangFile(currentFile)) {
             return null;
         }
         

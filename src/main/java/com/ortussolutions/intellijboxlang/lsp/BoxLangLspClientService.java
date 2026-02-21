@@ -12,6 +12,7 @@ import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.util.messages.MessageBusConnection;
+import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
@@ -347,13 +348,7 @@ public final class BoxLangLspClientService {
     }
 
     private boolean isBoxLangFile(VirtualFile file) {
-        String extension = file.getExtension();
-        if (extension == null) {
-            return false;
-        }
-        return extension.equalsIgnoreCase("bx")
-            || extension.equalsIgnoreCase("bxm")
-            || extension.equalsIgnoreCase("bxs");
+        return BoxLangFileUtil.isBoxLangFile(file);
     }
 
     public List<org.eclipse.lsp4j.Diagnostic> requestDiagnostics(VirtualFile file, Document document) {

@@ -10,6 +10,7 @@ import com.intellij.ui.RawCommandLineEditor;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.util.ui.FormBuilder;
+import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
@@ -36,12 +37,7 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
         scriptPathLabel = new JBLabel("Script path:");
         scriptPathField = new TextFieldWithBrowseButton();
         FileChooserDescriptor scriptDescriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-                .withFileFilter(file -> {
-                    String ext = file.getExtension();
-                    return ext != null && (ext.equalsIgnoreCase("bx") 
-                            || ext.equalsIgnoreCase("bxm") 
-                            || ext.equalsIgnoreCase("bxs"));
-                })
+                .withFileFilter(BoxLangFileUtil::isBoxLangFile)
                 .withTitle("Select BoxLang Script")
                 .withDescription("Select the BoxLang script file to run");
         scriptPathField.addBrowseFolderListener(new TextBrowseFolderListener(scriptDescriptor, project));
