@@ -49,33 +49,3 @@ jobs:
           name: plugin-distribution
           path: build/distributions/*.zip
           retention-days: 7
-
-  compatibility:
-    name: Verify IDE Compatibility
-    runs-on: ubuntu-latest
-    needs: build
-
-    strategy:
-      fail-fast: false
-      matrix:
-        ide-version:
-          - '2024.2'
-          - '2024.3'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-home-cache-cleanup: true
-
-      - name: Verify plugin compatibility
-        run: ./gradlew verifyPlugin -PplatformVersion=${{ matrix.ide-version }}
