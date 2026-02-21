@@ -49,5 +49,6 @@ bin/
 *.key
 *.crt
 *.cert
+*.srl
 *.p12
 *.jks

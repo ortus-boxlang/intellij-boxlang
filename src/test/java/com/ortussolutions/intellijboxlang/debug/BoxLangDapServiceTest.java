@@ -3,6 +3,8 @@ package com.ortussolutions.intellijboxlang.debug;
 import com.intellij.testFramework.fixtures.BasePlatformTestCase;
 import org.eclipse.lsp4j.debug.*;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -185,5 +187,27 @@ public class BoxLangDapServiceTest extends BasePlatformTestCase {
 		assertTrue( service.stepOut( 1 ).isCompletedExceptionally() );
 		assertTrue( service.pause( 1 ).isCompletedExceptionally() );
 		assertTrue( service.evaluate( "expression", 1, "watch" ).isCompletedExceptionally() );
+	}
+
+	public void testPrepareProgramPathForLaunchUsesWhitespaceSafeAlias() throws Exception {
+		Path	dirWithSpaces	= Files.createTempDirectory( "boxlang dap test " );
+		Path	scriptPath		= dirWithSpaces.resolve( "test.bxs" );
+		Files.writeString( scriptPath, "println(\"hello\")\n" );
+
+		String prepared = BoxLangDapService.prepareProgramPathForLaunch( scriptPath.toString() );
+		assertFalse( "Prepared path should avoid whitespace when aliasing succeeds", prepared.matches( ".*\\s+.*" ) );
+		assertFalse( "Prepared path should differ from original when original has whitespace", scriptPath.toString().equals( prepared ) );
+		assertTrue( "Prepared alias path should exist", Files.exists( Path.of( prepared ) ) );
+	}
+
+	public void testPrepareProgramPathForLaunchExpandsTildeAndStripsWrappingQuotes() {
+		String	userHome	= System.getProperty( "user.home" );
+		String	prepared	= BoxLangDapService.prepareProgramPathForLaunch( "\"~/IdeaProjects/boxlang-test.bxs\"" );
+		assertEquals( userHome + "/IdeaProjects/boxlang-test.bxs", prepared );
+	}
+
+	public void testPrepareProgramPathForLaunchLeavesSimplePathUnchanged() {
+		String prepared = BoxLangDapService.prepareProgramPathForLaunch( "/tmp/boxlang/test.bxs" );
+		assertEquals( "/tmp/boxlang/test.bxs", prepared );
 	}
 }

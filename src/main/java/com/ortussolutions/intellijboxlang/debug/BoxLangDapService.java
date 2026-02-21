@@ -21,6 +21,8 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -250,7 +252,7 @@ public class BoxLangDapService implements Disposable {
 	public CompletableFuture<Void> launch( @NotNull String scriptPath, @Nullable String workingDirectory,
 	    @Nullable List<String> args, boolean stopOnEntry ) {
 		Map<String, Object> launchArgs = new HashMap<>();
-		launchArgs.put( "program", scriptPath );
+		launchArgs.put( "program", prepareProgramPathForLaunch( scriptPath ) );
 		launchArgs.put( "stopOnEntry", stopOnEntry );
 
 		if ( workingDirectory != null && !workingDirectory.isBlank() ) {
@@ -264,6 +266,146 @@ public class BoxLangDapService implements Disposable {
 		launchArgs.put( "noDebug", false );
 
 		return callVoid( server -> server.launch( launchArgs ) );
+	}
+
+	static @NotNull String prepareProgramPathForLaunch( @NotNull String rawScriptPath ) {
+		String scriptPath = stripWrappingQuotes( rawScriptPath.trim() );
+		scriptPath = expandUserHomePath( scriptPath );
+
+		if ( containsWhitespace( scriptPath ) ) {
+			String aliasedPath = createWhitespaceSafeAliasPath( scriptPath );
+			if ( aliasedPath != null ) {
+				return aliasedPath;
+			}
+		}
+
+		return scriptPath;
+	}
+
+	private static @NotNull String stripWrappingQuotes( @NotNull String path ) {
+		if ( path.length() < 2 ) {
+			return path;
+		}
+		char	first	= path.charAt( 0 );
+		char	last	= path.charAt( path.length() - 1 );
+		if ( ( first == '"' && last == '"' ) || ( first == '\'' && last == '\'' ) ) {
+			return path.substring( 1, path.length() - 1 );
+		}
+		return path;
+	}
+
+	private static @NotNull String expandUserHomePath( @NotNull String path ) {
+		if ( !path.startsWith( "~" ) ) {
+			return path;
+		}
+
+		String userHome = System.getProperty( "user.home" );
+		if ( userHome == null || userHome.isBlank() ) {
+			return path;
+		}
+
+		if ( path.length() == 1 ) {
+			return userHome;
+		}
+
+		char second = path.charAt( 1 );
+		if ( second == '/' || second == '\\' ) {
+			return userHome + path.substring( 1 );
+		}
+
+		return path;
+	}
+
+	private static boolean containsWhitespace( @NotNull String value ) {
+		for ( int i = 0; i < value.length(); i++ ) {
+			if ( Character.isWhitespace( value.charAt( i ) ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static @Nullable String createWhitespaceSafeAliasPath( @NotNull String scriptPath ) {
+		try {
+			Path originalPath = Path.of( scriptPath ).toAbsolutePath().normalize();
+			if ( !Files.exists( originalPath ) ) {
+				return null;
+			}
+
+			Path originalParent = originalPath.getParent();
+			if ( originalParent == null ) {
+				return null;
+			}
+
+			Path aliasRoot = resolveAliasRoot();
+			Files.createDirectories( aliasRoot );
+
+			String	parentHash	= Integer.toHexString( originalParent.toString().hashCode() );
+			Path	aliasDir	= aliasRoot.resolve( "dir-" + parentHash );
+			ensureDirectoryAlias( aliasDir, originalParent );
+
+			Path	aliasedScriptPath		= aliasDir.resolve( originalPath.getFileName().toString() );
+			String	aliasedScriptPathString	= aliasedScriptPath.toString();
+			if ( containsWhitespace( aliasedScriptPathString ) ) {
+				return null;
+			}
+
+			if ( Files.exists( aliasedScriptPath ) ) {
+				return aliasedScriptPathString;
+			}
+
+			return null;
+		} catch ( Exception e ) {
+			LOG.warn( "Unable to create whitespace-safe launch path alias for: " + scriptPath, e );
+			return null;
+		}
+	}
+
+	private static void ensureDirectoryAlias( @NotNull Path aliasDir, @NotNull Path targetDir ) throws IOException {
+		if ( Files.exists( aliasDir, LinkOption.NOFOLLOW_LINKS ) ) {
+			if ( !Files.isSymbolicLink( aliasDir ) ) {
+				throw new IOException( "Alias path exists but is not a symbolic link: " + aliasDir );
+			}
+			Path	existingTarget			= Files.readSymbolicLink( aliasDir );
+			Path	resolvedExistingTarget	= aliasDir.getParent() != null
+			    ? aliasDir.getParent().resolve( existingTarget ).normalize()
+			    : existingTarget.normalize();
+			if ( resolvedExistingTarget.equals( targetDir.normalize() ) ) {
+				return;
+			}
+			Files.delete( aliasDir );
+		}
+
+		Files.createSymbolicLink( aliasDir, targetDir );
+	}
+
+	private static @NotNull Path resolveAliasRoot() {
+		List<Path> candidates = new ArrayList<>();
+		if ( !SystemInfo.isWindows ) {
+			candidates.add( Path.of( "/tmp" ) );
+		}
+
+		String tmpDir = System.getProperty( "java.io.tmpdir" );
+		if ( tmpDir != null && !tmpDir.isBlank() ) {
+			candidates.add( Path.of( tmpDir ) );
+		}
+
+		String userHome = System.getProperty( "user.home" );
+		if ( userHome != null && !userHome.isBlank() ) {
+			candidates.add( Path.of( userHome ) );
+		}
+
+		for ( Path candidate : candidates ) {
+			if ( !containsWhitespace( candidate.toString() ) ) {
+				return candidate.resolve( "intellij-boxlang-debug" );
+			}
+		}
+
+		if ( tmpDir != null && !tmpDir.isBlank() ) {
+			return Path.of( tmpDir ).resolve( "intellij-boxlang-debug" );
+		}
+
+		return Path.of( "intellij-boxlang-debug" ).toAbsolutePath();
 	}
 
 	/**
