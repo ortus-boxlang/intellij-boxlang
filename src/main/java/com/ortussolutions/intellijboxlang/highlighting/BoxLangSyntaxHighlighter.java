@@ -28,6 +28,8 @@ public final class BoxLangSyntaxHighlighter extends SyntaxHighlighterBase {
 			key = BoxLangTextAttributes.NUMBER;
 		} else if ( tokenType == BoxLangTokenTypes.STRING ) {
 			key = BoxLangTextAttributes.STRING;
+		} else if ( tokenType == BoxLangTokenTypes.HASH_SIGN ) {
+			key = BoxLangTextAttributes.HASH_SIGN;
 		} else if ( tokenType == BoxLangTokenTypes.LINE_COMMENT ) {
 			key = BoxLangTextAttributes.LINE_COMMENT;
 		} else if ( tokenType == BoxLangTokenTypes.BLOCK_COMMENT ) {

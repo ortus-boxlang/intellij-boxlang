@@ -71,6 +71,7 @@ public final class BoxLangColorSettingsPage implements ColorSettingsPage {
 	    new AttributesDescriptor( "Identifier", BoxLangTextAttributes.IDENTIFIER ),
 	    new AttributesDescriptor( "Number", BoxLangTextAttributes.NUMBER ),
 	    new AttributesDescriptor( "String", BoxLangTextAttributes.STRING ),
+	    new AttributesDescriptor( "Interpolation delimiter (#)", BoxLangTextAttributes.HASH_SIGN ),
 	    new AttributesDescriptor( "Line comment", BoxLangTextAttributes.LINE_COMMENT ),
 	    new AttributesDescriptor( "Block comment", BoxLangTextAttributes.BLOCK_COMMENT ),
 	    new AttributesDescriptor( "Operator", BoxLangTextAttributes.OPERATOR ),

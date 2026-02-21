@@ -9,6 +9,7 @@ public final class BoxLangTokenTypes {
 	public static final IElementType	IDENTIFIER		= new BoxLangTokenType( "IDENTIFIER" );
 	public static final IElementType	NUMBER			= new BoxLangTokenType( "NUMBER" );
 	public static final IElementType	STRING			= new BoxLangTokenType( "STRING" );
+	public static final IElementType	HASH_SIGN		= new BoxLangTokenType( "HASH_SIGN" );
 	public static final IElementType	LINE_COMMENT	= new BoxLangTokenType( "LINE_COMMENT" );
 	public static final IElementType	BLOCK_COMMENT	= new BoxLangTokenType( "BLOCK_COMMENT" );
 	public static final IElementType	OPERATOR		= new BoxLangTokenType( "OPERATOR" );

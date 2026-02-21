@@ -39,6 +39,77 @@ public final class BoxLangLexerHighlightingTest extends BasePlatformTestCase {
 		);
 	}
 
+	public void testStringInterpolationTokens() {
+		// Test basic interpolation: "Hello, #name#!"
+		List<IElementType> tokens = lexTokens( "\"Hello, #name#!\"" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING, // Opening quote "
+		    BoxLangTokenTypes.STRING, // "Hello, "
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.IDENTIFIER, // name
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.STRING, // "!"
+		    BoxLangTokenTypes.STRING // Closing quote "
+		);
+	}
+
+	public void testStringInterpolationWithExpression() {
+		// Test interpolation with expression: "Result: #foo + bar#"
+		List<IElementType> tokens = lexTokens( "\"Result: #foo + bar#\"" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING, // Opening quote "
+		    BoxLangTokenTypes.STRING, // "Result: "
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.IDENTIFIER, // foo
+		    BoxLangTokenTypes.OPERATOR, // +
+		    BoxLangTokenTypes.IDENTIFIER, // bar
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.STRING // Closing quote "
+		);
+	}
+
+	public void testEscapedHashInString() {
+		// Test escaped hash: "Price: ##50"
+		List<IElementType> tokens = lexTokens( "\"Price: ##50\"" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING, // Opening quote "
+		    BoxLangTokenTypes.STRING, // "Price: "
+		    BoxLangTokenTypes.STRING, // ## (escaped hash)
+		    BoxLangTokenTypes.STRING, // "50"
+		    BoxLangTokenTypes.STRING // Closing quote "
+		);
+	}
+
+	public void testSingleQuoteStringInterpolation() {
+		// Test single quote string with interpolation: 'Hello, #name#!'
+		List<IElementType> tokens = lexTokens( "'Hello, #name#!'" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING, // Opening quote '
+		    BoxLangTokenTypes.STRING, // 'Hello, '
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.IDENTIFIER, // name
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.STRING, // '!'
+		    BoxLangTokenTypes.STRING // Closing quote '
+		);
+	}
+
+	public void testNestedFunctionCallInInterpolation() {
+		// Test function call in interpolation: "Count: #len(items)#"
+		List<IElementType> tokens = lexTokens( "\"Count: #len(items)#\"" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING, // Opening quote "
+		    BoxLangTokenTypes.STRING, // "Count: "
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.IDENTIFIER, // len
+		    BoxLangTokenTypes.PAREN, // (
+		    BoxLangTokenTypes.IDENTIFIER, // items
+		    BoxLangTokenTypes.PAREN, // )
+		    BoxLangTokenTypes.HASH_SIGN, // #
+		    BoxLangTokenTypes.STRING // Closing quote "
+		);
+	}
+
 	private List<IElementType> lexTokens( String text ) {
 		Lexer lexer = new BoxLangLexer();
 		lexer.start( text );
