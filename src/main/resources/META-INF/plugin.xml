@@ -93,6 +93,12 @@
     <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
     <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangAttachDebugRunner"/>
 
+    <!-- Project Generator -->
+    <directoryProjectGenerator implementation="com.ortussolutions.intellijboxlang.project.BoxLangProjectGenerator"/>
+
+    <!-- Module Type for IntelliJ IDEA New Project wizard -->
+    <moduleType id="BOXLANG_MODULE" implementationClass="com.ortussolutions.intellijboxlang.project.BoxLangModuleType"/>
+
   </extensions>
 
   <actions>
