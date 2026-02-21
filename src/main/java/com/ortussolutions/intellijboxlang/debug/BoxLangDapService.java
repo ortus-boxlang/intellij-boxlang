@@ -147,38 +147,43 @@ public class BoxLangDapService implements Disposable {
 
 		LOG.info( "Starting DAP server process" );
 		serverProcess = commandLine.createProcess();
+		try {
+			// Start threads to capture and log the debugger server's stdout/stderr
+			startOutputCapture( serverProcess );
 
-		// Start threads to capture and log the debugger server's stdout/stderr
-		startOutputCapture( serverProcess );
+			socket = connectWithRetries( port );
+			LOG.info( "Connected to DAP server on port " + port );
 
-		socket = connectWithRetries( port );
-		LOG.info( "Connected to DAP server on port " + port );
+			BoxLangDapClient	client		= new BoxLangDapClient( this );
+			var					launcher	= DSPLauncher.createClientLauncher( client, socket.getInputStream(), socket.getOutputStream() );
+			debugServer = launcher.getRemoteProxy();
+			launcher.startListening();
 
-		BoxLangDapClient	client		= new BoxLangDapClient( this );
-		var					launcher	= DSPLauncher.createClientLauncher( client, socket.getInputStream(), socket.getOutputStream() );
-		debugServer = launcher.getRemoteProxy();
-		launcher.startListening();
+			// Perform DAP initialization handshake
+			InitializeRequestArguments initArgs = new InitializeRequestArguments();
+			initArgs.setClientID( "intellij-boxlang" );
+			initArgs.setClientName( "IntelliJ BoxLang Plugin" );
+			initArgs.setAdapterID( "boxlang" );
+			initArgs.setPathFormat( "path" );
+			initArgs.setLinesStartAt1( true );
+			initArgs.setColumnsStartAt1( true );
+			initArgs.setSupportsVariableType( true );
+			initArgs.setSupportsVariablePaging( false );
+			initArgs.setSupportsRunInTerminalRequest( false );
+			initArgs.setSupportsMemoryReferences( false );
+			initArgs.setSupportsProgressReporting( false );
+			initArgs.setSupportsInvalidatedEvent( true );
 
-		// Perform DAP initialization handshake
-		InitializeRequestArguments initArgs = new InitializeRequestArguments();
-		initArgs.setClientID( "intellij-boxlang" );
-		initArgs.setClientName( "IntelliJ BoxLang Plugin" );
-		initArgs.setAdapterID( "boxlang" );
-		initArgs.setPathFormat( "path" );
-		initArgs.setLinesStartAt1( true );
-		initArgs.setColumnsStartAt1( true );
-		initArgs.setSupportsVariableType( true );
-		initArgs.setSupportsVariablePaging( false );
-		initArgs.setSupportsRunInTerminalRequest( false );
-		initArgs.setSupportsMemoryReferences( false );
-		initArgs.setSupportsProgressReporting( false );
-		initArgs.setSupportsInvalidatedEvent( true );
+			serverCapabilities	= debugServer.initialize( initArgs )
+			    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
 
-		serverCapabilities	= debugServer.initialize( initArgs )
-		    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
-
-		initialized			= true;
-		LOG.info( "DAP server initialized" );
+			initialized			= true;
+			LOG.info( "DAP server initialized" );
+		} catch ( Exception e ) {
+			LOG.warn( "Failed to start DAP server, cleaning up partial startup", e );
+			cleanupFailedStart();
+			throw e;
+		}
 	}
 
 	/**
@@ -525,7 +530,7 @@ public class BoxLangDapService implements Disposable {
 	    @NotNull Consumer<String> lineLogger ) {
 		java.lang.Thread thread = new java.lang.Thread( () -> {
 			try ( java.io.BufferedReader reader = new java.io.BufferedReader(
-			    new java.io.InputStreamReader( inputStream ) ) ) {
+			    new java.io.InputStreamReader( inputStream, StandardCharsets.UTF_8 ) ) ) {
 				String line;
 				while ( ( line = reader.readLine() ) != null ) {
 					lineLogger.accept( line );
@@ -538,6 +543,27 @@ public class BoxLangDapService implements Disposable {
 		}, threadName );
 		thread.setDaemon( true );
 		thread.start();
+	}
+
+	private void cleanupFailedStart() {
+		try {
+			if ( socket != null && !socket.isClosed() ) {
+				socket.close();
+			}
+		} catch ( IOException e ) {
+			LOG.debug( "Error closing DAP socket after failed startup", e );
+		}
+
+		if ( serverProcess != null && serverProcess.isAlive() ) {
+			serverProcess.destroyForcibly();
+		}
+
+		debugServer			= null;
+		socket				= null;
+		serverProcess		= null;
+		serverCapabilities	= null;
+		initialized			= false;
+		configurationReady	= false;
 	}
 
 	private int allocatePort() throws IOException {

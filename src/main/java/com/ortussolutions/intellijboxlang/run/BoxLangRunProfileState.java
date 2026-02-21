@@ -24,11 +24,14 @@ import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
 import com.ortussolutions.intellijboxlang.settings.BoxLangSettingsResolver;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Defines how to execute a BoxLang script.
@@ -86,6 +89,7 @@ public class BoxLangRunProfileState extends CommandLineState {
 		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
 			commandLine.withEnvironment( "JAVA_HOME", settings.javaHome );
 		}
+		applyEnvironmentVariables( commandLine );
 
 		// Set working directory
 		String workingDir = configuration.getWorkingDirectory();
@@ -118,6 +122,35 @@ public class BoxLangRunProfileState extends CommandLineState {
 		}
 
 		return commandLine;
+	}
+
+	private void applyEnvironmentVariables( GeneralCommandLine commandLine ) {
+		for ( Map.Entry<String, String> entry : parseEnvironmentVariables( configuration.getEnvironmentVariables() ).entrySet() ) {
+			String	key		= entry.getKey();
+			String	value	= entry.getValue();
+			commandLine.withEnvironment( key, value );
+		}
+	}
+
+	static Map<String, String> parseEnvironmentVariables( @Nullable String rawEnvironmentVariables ) {
+		Map<String, String> variables = new LinkedHashMap<>();
+		if ( rawEnvironmentVariables == null || rawEnvironmentVariables.isBlank() ) {
+			return variables;
+		}
+
+		for ( String token : ParametersListUtil.parse( rawEnvironmentVariables ) ) {
+			int separatorIndex = token.indexOf( '=' );
+			if ( separatorIndex <= 0 ) {
+				continue;
+			}
+			String key = token.substring( 0, separatorIndex ).trim();
+			if ( key.isEmpty() ) {
+				continue;
+			}
+			String value = token.substring( separatorIndex + 1 );
+			variables.put( key, value );
+		}
+		return variables;
 	}
 
 	private String resolveJavaExecutable( BoxLangResolvedSettings settings ) {

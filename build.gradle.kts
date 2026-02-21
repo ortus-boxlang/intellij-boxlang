@@ -46,20 +46,30 @@ intellijPlatform {
 
 spotless {
   java {
-    target(
-      fileTree(".") {
-        include("**/*.java")
-        exclude(
-          "**/build/**",
-          "bin/**",
-          "examples/**",
-          "src/main/java/ortus/boxlang/runtime/testing/**",
-          "src/main/gen/**",
-          "src/main/antlr/gen",
-          "modules/**"
-        )
-      }
-    )
+    val stagedSpotlessFiles = providers.gradleProperty("spotlessFiles").orNull
+      ?.split(",")
+      ?.map { it.trim() }
+      ?.filter { it.isNotEmpty() }
+      .orEmpty()
+
+    if (stagedSpotlessFiles.isNotEmpty()) {
+      target(stagedSpotlessFiles)
+    } else {
+      target(
+        fileTree(".") {
+          include("**/*.java")
+          exclude(
+            "**/build/**",
+            "bin/**",
+            "examples/**",
+            "src/main/java/ortus/boxlang/runtime/testing/**",
+            "src/main/gen/**",
+            "src/main/antlr/gen",
+            "modules/**"
+          )
+        }
+      )
+    }
     eclipse().configFile("workbench/ortus-java-style.xml")
     toggleOffOn()
   }

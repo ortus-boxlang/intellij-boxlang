@@ -65,7 +65,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		if ( state.useProjectSettings ) {
 			form.apply( state );
 		} else {
-			clearOverrides( state );
+			clearOverrides( state, BoxLangApplicationSettings.getInstance().getSettings() );
 			form.apply( BoxLangApplicationSettings.getInstance().getSettings() );
 		}
 	}
@@ -90,7 +90,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		settingsScopeLabel			= null;
 	}
 
-	private void clearOverrides( BoxLangProjectSettingsState state ) {
+	static void clearOverrides( BoxLangProjectSettingsState state, BoxLangSettingsState defaults ) {
 		state.boxLangVersion		= null;
 		state.boxLangJarPath		= null;
 		state.boxLangHome			= null;
@@ -100,9 +100,10 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		state.lspBoxLangHome		= null;
 		state.lspModules			= null;
 		state.lspJvmArgs			= null;
-		state.lspMaxHeapSize		= BoxLangApplicationSettings.getInstance().getSettings().lspMaxHeapSize;
-		state.useBvmrc				= BoxLangApplicationSettings.getInstance().getSettings().useBvmrc;
-		state.promptForDownloads	= BoxLangApplicationSettings.getInstance().getSettings().promptForDownloads;
+		state.debuggerJarPath		= null;
+		state.lspMaxHeapSize		= defaults.lspMaxHeapSize;
+		state.useBvmrc				= defaults.useBvmrc;
+		state.promptForDownloads	= defaults.promptForDownloads;
 	}
 
 	private void updateFormState() {
@@ -124,7 +125,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		}
 	}
 
-	private BoxLangSettingsState mergeWithDefaults( BoxLangProjectSettingsState state, BoxLangSettingsState defaults ) {
+	static BoxLangSettingsState mergeWithDefaults( BoxLangProjectSettingsState state, BoxLangSettingsState defaults ) {
 		BoxLangSettingsState merged = new BoxLangSettingsState();
 		merged.boxLangVersion		= state.boxLangVersion != null ? state.boxLangVersion : defaults.boxLangVersion;
 		merged.boxLangJarPath		= state.boxLangJarPath != null ? state.boxLangJarPath : defaults.boxLangJarPath;
@@ -135,6 +136,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		merged.lspBoxLangHome		= state.lspBoxLangHome != null ? state.lspBoxLangHome : defaults.lspBoxLangHome;
 		merged.lspModules			= state.lspModules != null ? state.lspModules : defaults.lspModules;
 		merged.lspJvmArgs			= state.lspJvmArgs != null ? state.lspJvmArgs : defaults.lspJvmArgs;
+		merged.debuggerJarPath		= state.debuggerJarPath != null ? state.debuggerJarPath : defaults.debuggerJarPath;
 		merged.lspMaxHeapSize		= state.lspMaxHeapSize != 0 ? state.lspMaxHeapSize : defaults.lspMaxHeapSize;
 		merged.useBvmrc				= state.useBvmrc;
 		merged.promptForDownloads	= state.promptForDownloads;

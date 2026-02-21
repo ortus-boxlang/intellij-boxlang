@@ -4,8 +4,11 @@ import com.intellij.execution.lineMarker.ExecutorAction;
 import com.intellij.execution.lineMarker.RunLineMarkerContributor;
 import com.intellij.icons.AllIcons;
 import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.editor.Document;
+import com.intellij.openapi.util.Key;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
+import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -25,10 +28,11 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 
 	// Pattern to match "function main(" with optional whitespace and modifiers
 	// Matches: function main(), public function main(), static function main(), etc.
-	private static final Pattern MAIN_FUNCTION_PATTERN = Pattern.compile(
+	private static final Pattern				MAIN_FUNCTION_PATTERN	= Pattern.compile(
 	    "(?:^|\\s)(?:public\\s+|private\\s+|static\\s+)*function\\s+main\\s*\\(",
 	    Pattern.CASE_INSENSITIVE | Pattern.MULTILINE
 	);
+	private static final Key<MainFunctionCache>	MAIN_FUNCTION_CACHE_KEY	= Key.create( "boxlang.main.function.cache" );
 
 	@Override
 	public @Nullable Info getInfo( @NotNull PsiElement element ) {
@@ -61,31 +65,22 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 	 * For .bx class files, show run icon on the main() method.
 	 */
 	private @Nullable Info getInfoForClassFile( @NotNull PsiElement element, @NotNull PsiFile file ) {
-		String text = file.getText();
-		if ( text == null || text.isEmpty() ) {
+		int mainLine = getCachedMainFunctionLine( file );
+		if ( mainLine < 0 ) {
 			return null;
 		}
 
-		// Find the main function in the file
-		Matcher matcher = MAIN_FUNCTION_PATTERN.matcher( text );
-		if ( !matcher.find() ) {
-			// No main method found - don't show run icon
+		Document document = PsiDocumentManager.getInstance( file.getProject() ).getDocument( file );
+		if ( document == null ) {
 			return null;
 		}
-
-		// Get the line number where main() is defined
-		int		mainOffset	= matcher.start();
-		// Skip any leading whitespace in the match to get to "function" or modifier
-		String	match		= matcher.group();
-		if ( !StringUtil.isEmpty( match ) && Character.isWhitespace( match.charAt( 0 ) ) ) {
-			mainOffset += 1;
-		}
-
-		int	mainLine		= getLineNumber( text, mainOffset );
 
 		// Get the line number of the current element
-		int	elementOffset	= element.getTextOffset();
-		int	elementLine		= getLineNumber( text, elementOffset );
+		int elementOffset = element.getTextOffset();
+		if ( elementOffset < 0 || elementOffset > document.getTextLength() ) {
+			return null;
+		}
+		int elementLine = getLineNumber( document, elementOffset );
 
 		// Only show the marker if this element is on the same line as main()
 		if ( elementLine != mainLine ) {
@@ -93,7 +88,7 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 		}
 
 		// Check if this is the first element on this line to avoid duplicates
-		if ( !isFirstElementOnLine( element, text, elementLine ) ) {
+		if ( !isFirstElementOnLine( element, document ) ) {
 			return null;
 		}
 
@@ -103,6 +98,36 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 		    actions,
 		    psiElement -> "Run " + file.getName()
 		);
+	}
+
+	private int getCachedMainFunctionLine( @NotNull PsiFile file ) {
+		long				modificationStamp	= file.getModificationStamp();
+		MainFunctionCache	cached				= file.getUserData( MAIN_FUNCTION_CACHE_KEY );
+		if ( cached != null && cached.modificationStamp == modificationStamp ) {
+			return cached.mainLine;
+		}
+
+		int mainLine = computeMainFunctionLine( file.getText() );
+		file.putUserData( MAIN_FUNCTION_CACHE_KEY, new MainFunctionCache( modificationStamp, mainLine ) );
+		return mainLine;
+	}
+
+	private int computeMainFunctionLine( @Nullable String text ) {
+		if ( text == null || text.isEmpty() ) {
+			return -1;
+		}
+		Matcher matcher = MAIN_FUNCTION_PATTERN.matcher( text );
+		if ( !matcher.find() ) {
+			return -1;
+		}
+
+		int		mainOffset	= matcher.start();
+		// Skip any leading whitespace in the match to get to "function" or modifier.
+		String	match		= matcher.group();
+		if ( !StringUtil.isEmpty( match ) && Character.isWhitespace( match.charAt( 0 ) ) ) {
+			mainOffset += 1;
+		}
+		return getLineNumber( text, mainOffset );
 	}
 
 	/**
@@ -140,44 +165,34 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 		return line;
 	}
 
+	private int getLineNumber( @NotNull Document document, int offset ) {
+		if ( document.getTextLength() == 0 ) {
+			return 0;
+		}
+		int safeOffset = Math.max( 0, Math.min( offset, document.getTextLength() - 1 ) );
+		return document.getLineNumber( safeOffset );
+	}
+
 	/**
 	 * Checks if this element is the first element on its line.
 	 */
-	private boolean isFirstElementOnLine( @NotNull PsiElement element, String text, int targetLine ) {
-		// Find the start of the target line
-		int	lineStart	= 0;
-		int	currentLine	= 0;
-		for ( int i = 0; i < text.length() && currentLine < targetLine; i++ ) {
-			char c = text.charAt( i );
-			if ( c == '\n' ) {
-				currentLine++;
-				lineStart = i + 1;
-			} else if ( c == '\r' ) {
-				currentLine++;
-				lineStart = i + 1;
-				if ( i + 1 < text.length() && text.charAt( i + 1 ) == '\n' ) {
-					i++;
-					lineStart = i + 1;
-				}
-			}
+	private boolean isFirstElementOnLine( @NotNull PsiElement element, @NotNull Document document ) {
+		int elementOffset = element.getTextOffset();
+		if ( elementOffset < 0 || elementOffset > document.getTextLength() ) {
+			return false;
 		}
 
-		// The element should start at or very near the beginning of the line (after whitespace)
-		int elementOffset = element.getTextOffset();
+		int				lineNumber	= getLineNumber( document, elementOffset );
+		int				lineStart	= document.getLineStartOffset( lineNumber );
+		CharSequence	chars		= document.getCharsSequence();
 
-		// Check if element is between line start and line start + some whitespace
-		for ( int i = lineStart; i <= elementOffset && i < text.length(); i++ ) {
-			char c = text.charAt( i );
-			if ( i == elementOffset ) {
-				return true; // Element starts here, and we only passed whitespace
-			}
+		for ( int i = lineStart; i < elementOffset && i < chars.length(); i++ ) {
+			char c = chars.charAt( i );
 			if ( c != ' ' && c != '\t' ) {
-				// Found non-whitespace before the element
 				return false;
 			}
 		}
-
-		return elementOffset == lineStart;
+		return true;
 	}
 
 	/**
@@ -200,5 +215,16 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 		}
 
 		return element.equals( firstChild );
+	}
+
+	private static final class MainFunctionCache {
+
+		private final long	modificationStamp;
+		private final int	mainLine;
+
+		private MainFunctionCache( long modificationStamp, int mainLine ) {
+			this.modificationStamp	= modificationStamp;
+			this.mainLine			= mainLine;
+		}
 	}
 }

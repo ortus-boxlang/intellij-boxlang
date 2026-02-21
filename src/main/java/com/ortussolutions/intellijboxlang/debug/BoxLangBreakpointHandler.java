@@ -75,7 +75,9 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
 			}
 		}
 
-		pushBreakpoints( filePath );
+		if ( configurationComplete ) {
+			pushBreakpoints( filePath );
+		}
 	}
 
 	/**
