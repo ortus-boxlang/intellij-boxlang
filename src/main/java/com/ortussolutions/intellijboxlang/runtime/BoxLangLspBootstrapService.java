@@ -13,135 +13,138 @@ import java.nio.file.Path;
 import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangLspBootstrapService {
-    private static final java.util.concurrent.ConcurrentHashMap<Project, Object> PROJECT_LOCKS =
-        new java.util.concurrent.ConcurrentHashMap<>();
-    private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean> LSP_PROMPTED =
-        new java.util.concurrent.ConcurrentHashMap<>();
-    private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean> RUNTIME_PROMPTED =
-        new java.util.concurrent.ConcurrentHashMap<>();
-    private static final com.intellij.openapi.diagnostic.Logger LOG =
-        com.intellij.openapi.diagnostic.Logger.getInstance(BoxLangLspBootstrapService.class);
-    private BoxLangLspBootstrapService() {
-    }
 
-    public static LspBootstrapResult prepare(Project project) throws IOException {
-        LOG.info("Preparing BoxLang LSP bootstrap");
-        synchronized (getProjectLock(project)) {
-            BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve(project);
-            LspModuleInfo lspModule = resolveLspModule(project, settings);
-            LspRequirements requirements = LspRequirementsReader.read(lspModule.boxJsonPath);
+	private static final java.util.concurrent.ConcurrentHashMap<Project, Object>	PROJECT_LOCKS		= new java.util.concurrent.ConcurrentHashMap<>();
+	private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean>	LSP_PROMPTED		= new java.util.concurrent.ConcurrentHashMap<>();
+	private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean>	RUNTIME_PROMPTED	= new java.util.concurrent.ConcurrentHashMap<>();
+	private static final com.intellij.openapi.diagnostic.Logger						LOG					= com.intellij.openapi.diagnostic.Logger
+	    .getInstance( BoxLangLspBootstrapService.class );
 
-            String requiredVersion = settings.lspBoxLangVersion != null ? settings.lspBoxLangVersion
-                : (requirements != null ? requirements.minimumBoxLangVersion : null);
-            if (requiredVersion == null || requiredVersion.isBlank()) {
-                throw new IOException("Unable to determine required BoxLang version for LSP.");
-            }
+	private BoxLangLspBootstrapService() {
+	}
 
-            boolean treatAsMinimum = settings.lspBoxLangVersion == null || settings.lspBoxLangVersion.isBlank();
-            BoxLangRuntimeInfo runtimeInfo = BoxLangRuntimeResolver.resolveLspRuntime(requiredVersion, treatAsMinimum);
-        LOG.info("Resolved BoxLang runtime for LSP: required=" + requiredVersion + ", resolved=" + runtimeInfo.resolvedVersion);
-        BoxLangRuntimeSelection runtimeSelection = ensureRuntime(project, runtimeInfo, settings);
+	public static LspBootstrapResult prepare( Project project ) throws IOException {
+		LOG.info( "Preparing BoxLang LSP bootstrap" );
+		synchronized ( getProjectLock( project ) ) {
+			BoxLangResolvedSettings	settings		= BoxLangSettingsResolver.resolve( project );
+			LspModuleInfo			lspModule		= resolveLspModule( project, settings );
+			LspRequirements			requirements	= LspRequirementsReader.read( lspModule.boxJsonPath );
 
-            LspBootstrapResult result = new LspBootstrapResult();
-            Path moduleRoot = lspModule.modulePath.getParent();
-            result.lspModulePath = moduleRoot != null ? moduleRoot : lspModule.modulePath;
-            result.lspBoxLangHome = ensureLspHome(project, settings);
-            result.boxLangJarPath = runtimeSelection.jarPath;
-            result.boxLangVersion = runtimeSelection.resolvedVersion;
-            return result;
-        }
-    }
+			String					requiredVersion	= settings.lspBoxLangVersion != null ? settings.lspBoxLangVersion
+			    : ( requirements != null ? requirements.minimumBoxLangVersion : null );
+			if ( requiredVersion == null || requiredVersion.isBlank() ) {
+				throw new IOException( "Unable to determine required BoxLang version for LSP." );
+			}
 
-    private static Path ensureLspHome(Project project, BoxLangResolvedSettings settings) throws IOException {
-        Path home = BoxLangLspHomeResolver.resolve(project, settings);
-        Files.createDirectories(home);
-        Files.createDirectories(home.resolve("modules"));
-        return home;
-    }
+			boolean				treatAsMinimum	= settings.lspBoxLangVersion == null || settings.lspBoxLangVersion.isBlank();
+			BoxLangRuntimeInfo	runtimeInfo		= BoxLangRuntimeResolver.resolveLspRuntime( requiredVersion, treatAsMinimum );
+			LOG.info( "Resolved BoxLang runtime for LSP: required=" + requiredVersion + ", resolved=" + runtimeInfo.resolvedVersion );
+			BoxLangRuntimeSelection	runtimeSelection	= ensureRuntime( project, runtimeInfo, settings );
 
-    private static LspModuleInfo resolveLspModule(Project project, BoxLangResolvedSettings settings) throws IOException {
-        LspModuleInfo info = LspModuleResolver.resolve(settings);
-        if (settings.lspVersion == null || settings.lspVersion.isBlank()) {
-            throw new IOException("LSP version is not configured.");
-        }
-        if (!info.needsDownload) {
-            return info;
-        }
+			LspBootstrapResult		result				= new LspBootstrapResult();
+			Path					moduleRoot			= lspModule.modulePath.getParent();
+			result.lspModulePath	= moduleRoot != null ? moduleRoot : lspModule.modulePath;
+			result.lspBoxLangHome	= ensureLspHome( project, settings );
+			result.boxLangJarPath	= runtimeSelection.jarPath;
+			result.boxLangVersion	= runtimeSelection.resolvedVersion;
+			return result;
+		}
+	}
 
-        if (settings.promptForDownloads && !hasPrompted(LSP_PROMPTED, project)) {
-            if (!BoxLangPromptService.confirmDownload(project,
-                "Download BoxLang LSP",
-                "BoxLang LSP module (" + settings.lspVersion + ") is not installed. Download now?")) {
-                throw new IOException("BoxLang LSP module download was declined.");
-            }
-            LSP_PROMPTED.put(project, true);
-        }
+	private static Path ensureLspHome( Project project, BoxLangResolvedSettings settings ) throws IOException {
+		Path home = BoxLangLspHomeResolver.resolve( project, settings );
+		Files.createDirectories( home );
+		Files.createDirectories( home.resolve( "modules" ) );
+		return home;
+	}
 
-        ProgressManager.getInstance().run(new DownloadTask(project, "Downloading BoxLang LSP module") {
-            @Override
-            protected void runTask(@NotNull ProgressIndicator indicator) throws IOException {
-                LOG.info("Downloading bx-lsp " + settings.lspVersion + " to " + info.modulePath);
-                ForgeBoxLspInstaller.install(settings.lspVersion, info.modulePath, indicator);
-            }
-        });
+	private static LspModuleInfo resolveLspModule( Project project, BoxLangResolvedSettings settings ) throws IOException {
+		LspModuleInfo info = LspModuleResolver.resolve( settings );
+		if ( settings.lspVersion == null || settings.lspVersion.isBlank() ) {
+			throw new IOException( "LSP version is not configured." );
+		}
+		if ( !info.needsDownload ) {
+			return info;
+		}
 
-        LspModuleInfo refreshed = LspModuleResolver.resolve(settings);
-        if (refreshed.needsDownload) {
-            throw new IOException("BoxLang LSP module installation failed.");
-        }
-        return refreshed;
-    }
+		if ( settings.promptForDownloads && !hasPrompted( LSP_PROMPTED, project ) ) {
+			if ( !BoxLangPromptService.confirmDownload( project,
+			    "Download BoxLang LSP",
+			    "BoxLang LSP module (" + settings.lspVersion + ") is not installed. Download now?" ) ) {
+				throw new IOException( "BoxLang LSP module download was declined." );
+			}
+			LSP_PROMPTED.put( project, true );
+		}
 
-    private static Object getProjectLock(Project project) {
-        return PROJECT_LOCKS.computeIfAbsent(project, key -> new Object());
-    }
+		ProgressManager.getInstance().run( new DownloadTask( project, "Downloading BoxLang LSP module" ) {
 
-    private static boolean hasPrompted(java.util.concurrent.ConcurrentHashMap<Project, Boolean> map, Project project) {
-        return Boolean.TRUE.equals(map.get(project));
-    }
+			@Override
+			protected void runTask( @NotNull ProgressIndicator indicator ) throws IOException {
+				LOG.info( "Downloading bx-lsp " + settings.lspVersion + " to " + info.modulePath );
+				ForgeBoxLspInstaller.install( settings.lspVersion, info.modulePath, indicator );
+			}
+		} );
 
-    private static BoxLangRuntimeSelection ensureRuntime(Project project, BoxLangRuntimeInfo runtimeInfo, BoxLangResolvedSettings settings) throws IOException {
-        if (!runtimeInfo.needsDownload) {
-            BoxLangRuntimeSelection selection = new BoxLangRuntimeSelection();
-            selection.jarPath = Path.of(runtimeInfo.jarPath);
-            selection.resolvedVersion = runtimeInfo.resolvedVersion;
-            return selection;
-        }
+		LspModuleInfo refreshed = LspModuleResolver.resolve( settings );
+		if ( refreshed.needsDownload ) {
+			throw new IOException( "BoxLang LSP module installation failed." );
+		}
+		return refreshed;
+	}
 
-        if (settings.promptForDownloads && !hasPrompted(RUNTIME_PROMPTED, project)) {
-            if (!BoxLangPromptService.confirmDownload(project,
-                "Download BoxLang Runtime",
-                "BoxLang runtime ^" + runtimeInfo.requestedVersion + " is required for the LSP. Download now?")) {
-                throw new IOException("BoxLang runtime download was declined.");
-            }
-            RUNTIME_PROMPTED.put(project, true);
-        }
+	private static Object getProjectLock( Project project ) {
+		return PROJECT_LOCKS.computeIfAbsent( project, key -> new Object() );
+	}
 
-        ProgressManager.getInstance().run(new DownloadTask(project, "Downloading BoxLang runtime") {
-            @Override
-            protected void runTask(@NotNull ProgressIndicator indicator) throws IOException {
-                BoxLangRuntimeInstaller.installRuntime(runtimeInfo.resolvedVersion, runtimeInfo.downloadUrl, indicator);
-            }
-        });
+	private static boolean hasPrompted( java.util.concurrent.ConcurrentHashMap<Project, Boolean> map, Project project ) {
+		return Boolean.TRUE.equals( map.get( project ) );
+	}
 
-        BoxLangRuntimeSelection selection = BoxLangRuntimeInstaller.resolveCachedJar(runtimeInfo.resolvedVersion);
-        if (selection == null) {
-            throw new IOException("BoxLang runtime installation failed.");
-        }
-        return selection;
-    }
+	private static BoxLangRuntimeSelection ensureRuntime( Project project, BoxLangRuntimeInfo runtimeInfo, BoxLangResolvedSettings settings )
+	    throws IOException {
+		if ( !runtimeInfo.needsDownload ) {
+			BoxLangRuntimeSelection selection = new BoxLangRuntimeSelection();
+			selection.jarPath			= Path.of( runtimeInfo.jarPath );
+			selection.resolvedVersion	= runtimeInfo.resolvedVersion;
+			return selection;
+		}
 
-    private abstract static class DownloadTask extends Task.WithResult<Void, IOException> {
-        protected DownloadTask(Project project, @NlsContexts.ProgressTitle String title) {
-            super(project, title, true);
-        }
+		if ( settings.promptForDownloads && !hasPrompted( RUNTIME_PROMPTED, project ) ) {
+			if ( !BoxLangPromptService.confirmDownload( project,
+			    "Download BoxLang Runtime",
+			    "BoxLang runtime ^" + runtimeInfo.requestedVersion + " is required for the LSP. Download now?" ) ) {
+				throw new IOException( "BoxLang runtime download was declined." );
+			}
+			RUNTIME_PROMPTED.put( project, true );
+		}
 
-        @Override
-        protected Void compute(@NotNull ProgressIndicator indicator) throws IOException {
-            runTask(indicator);
-            return null;
-        }
+		ProgressManager.getInstance().run( new DownloadTask( project, "Downloading BoxLang runtime" ) {
 
-        protected abstract void runTask(@NotNull ProgressIndicator indicator) throws IOException;
-    }
+			@Override
+			protected void runTask( @NotNull ProgressIndicator indicator ) throws IOException {
+				BoxLangRuntimeInstaller.installRuntime( runtimeInfo.resolvedVersion, runtimeInfo.downloadUrl, indicator );
+			}
+		} );
+
+		BoxLangRuntimeSelection selection = BoxLangRuntimeInstaller.resolveCachedJar( runtimeInfo.resolvedVersion );
+		if ( selection == null ) {
+			throw new IOException( "BoxLang runtime installation failed." );
+		}
+		return selection;
+	}
+
+	private abstract static class DownloadTask extends Task.WithResult<Void, IOException> {
+
+		protected DownloadTask( Project project, @NlsContexts.ProgressTitle String title ) {
+			super( project, title, true );
+		}
+
+		@Override
+		protected Void compute( @NotNull ProgressIndicator indicator ) throws IOException {
+			runTask( indicator );
+			return null;
+		}
+
+		protected abstract void runTask( @NotNull ProgressIndicator indicator ) throws IOException;
+	}
 }

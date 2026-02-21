@@ -10,21 +10,21 @@ import java.util.Locale;
  */
 public final class BoxLangFileUtil {
 
-    private BoxLangFileUtil() {
-    }
+	private BoxLangFileUtil() {
+	}
 
-    public static boolean isBoxLangFile(@Nullable VirtualFile file) {
-        return file != null && isBoxLangExtension(file.getExtension());
-    }
+	public static boolean isBoxLangFile( @Nullable VirtualFile file ) {
+		return file != null && isBoxLangExtension( file.getExtension() );
+	}
 
-    public static boolean isBoxLangExtension(@Nullable String extension) {
-        if (extension == null || extension.isBlank()) {
-            return false;
-        }
+	public static boolean isBoxLangExtension( @Nullable String extension ) {
+		if ( extension == null || extension.isBlank() ) {
+			return false;
+		}
 
-        String normalized = extension.toLowerCase(Locale.ROOT);
-        return normalized.equals("bx")
-            || normalized.equals("bxs")
-            || normalized.equals("bxm");
-    }
+		String normalized = extension.toLowerCase( Locale.ROOT );
+		return normalized.equals( "bx" )
+		    || normalized.equals( "bxs" )
+		    || normalized.equals( "bxm" );
+	}
 }

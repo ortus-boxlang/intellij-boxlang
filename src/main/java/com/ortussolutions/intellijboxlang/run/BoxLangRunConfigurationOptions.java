@@ -9,80 +9,80 @@ import com.intellij.openapi.components.StoredProperty;
  */
 public class BoxLangRunConfigurationOptions extends RunConfigurationOptions {
 
-    private final StoredProperty<String> scriptPath = string("")
-            .provideDelegate(this, "scriptPath");
+	private final StoredProperty<String>	scriptPath				= string( "" )
+	    .provideDelegate( this, "scriptPath" );
 
-    private final StoredProperty<Boolean> useCurrentFile = property(true)
-            .provideDelegate(this, "useCurrentFile");
+	private final StoredProperty<Boolean>	useCurrentFile			= property( true )
+	    .provideDelegate( this, "useCurrentFile" );
 
-    private final StoredProperty<String> workingDirectory = string("")
-            .provideDelegate(this, "workingDirectory");
+	private final StoredProperty<String>	workingDirectory		= string( "" )
+	    .provideDelegate( this, "workingDirectory" );
 
-    private final StoredProperty<String> programArguments = string("")
-            .provideDelegate(this, "programArguments");
+	private final StoredProperty<String>	programArguments		= string( "" )
+	    .provideDelegate( this, "programArguments" );
 
-    private final StoredProperty<String> environmentVariables = string("")
-            .provideDelegate(this, "environmentVariables");
+	private final StoredProperty<String>	environmentVariables	= string( "" )
+	    .provideDelegate( this, "environmentVariables" );
 
-    private final StoredProperty<String> boxLangHome = string("")
-            .provideDelegate(this, "boxLangHome");
+	private final StoredProperty<String>	boxLangHome				= string( "" )
+	    .provideDelegate( this, "boxLangHome" );
 
-    private final StoredProperty<String> jvmArgs = string("")
-            .provideDelegate(this, "jvmArgs");
+	private final StoredProperty<String>	jvmArgs					= string( "" )
+	    .provideDelegate( this, "jvmArgs" );
 
-    public String getScriptPath() {
-        return scriptPath.getValue(this);
-    }
+	public String getScriptPath() {
+		return scriptPath.getValue( this );
+	}
 
-    public void setScriptPath(String path) {
-        scriptPath.setValue(this, path);
-    }
+	public void setScriptPath( String path ) {
+		scriptPath.setValue( this, path );
+	}
 
-    public boolean isUseCurrentFile() {
-        return useCurrentFile.getValue(this);
-    }
+	public boolean isUseCurrentFile() {
+		return useCurrentFile.getValue( this );
+	}
 
-    public void setUseCurrentFile(boolean use) {
-        useCurrentFile.setValue(this, use);
-    }
+	public void setUseCurrentFile( boolean use ) {
+		useCurrentFile.setValue( this, use );
+	}
 
-    public String getWorkingDirectory() {
-        return workingDirectory.getValue(this);
-    }
+	public String getWorkingDirectory() {
+		return workingDirectory.getValue( this );
+	}
 
-    public void setWorkingDirectory(String directory) {
-        workingDirectory.setValue(this, directory);
-    }
+	public void setWorkingDirectory( String directory ) {
+		workingDirectory.setValue( this, directory );
+	}
 
-    public String getProgramArguments() {
-        return programArguments.getValue(this);
-    }
+	public String getProgramArguments() {
+		return programArguments.getValue( this );
+	}
 
-    public void setProgramArguments(String arguments) {
-        programArguments.setValue(this, arguments);
-    }
+	public void setProgramArguments( String arguments ) {
+		programArguments.setValue( this, arguments );
+	}
 
-    public String getEnvironmentVariables() {
-        return environmentVariables.getValue(this);
-    }
+	public String getEnvironmentVariables() {
+		return environmentVariables.getValue( this );
+	}
 
-    public void setEnvironmentVariables(String variables) {
-        environmentVariables.setValue(this, variables);
-    }
+	public void setEnvironmentVariables( String variables ) {
+		environmentVariables.setValue( this, variables );
+	}
 
-    public String getBoxLangHome() {
-        return boxLangHome.getValue(this);
-    }
+	public String getBoxLangHome() {
+		return boxLangHome.getValue( this );
+	}
 
-    public void setBoxLangHome(String home) {
-        boxLangHome.setValue(this, home);
-    }
+	public void setBoxLangHome( String home ) {
+		boxLangHome.setValue( this, home );
+	}
 
-    public String getJvmArgs() {
-        return jvmArgs.getValue(this);
-    }
+	public String getJvmArgs() {
+		return jvmArgs.getValue( this );
+	}
 
-    public void setJvmArgs(String args) {
-        jvmArgs.setValue(this, args);
-    }
+	public void setJvmArgs( String args ) {
+		jvmArgs.setValue( this, args );
+	}
 }

@@ -35,162 +35,162 @@ import java.util.List;
  */
 public class BoxLangRunProfileState extends CommandLineState {
 
-    private final BoxLangRunConfiguration configuration;
+	private final BoxLangRunConfiguration configuration;
 
-    public BoxLangRunProfileState(BoxLangRunConfiguration configuration, ExecutionEnvironment environment) {
-        super(environment);
-        this.configuration = configuration;
-    }
+	public BoxLangRunProfileState( BoxLangRunConfiguration configuration, ExecutionEnvironment environment ) {
+		super( environment );
+		this.configuration = configuration;
+	}
 
-    @Override
-    protected @NotNull ProcessHandler startProcess() throws ExecutionException {
-        GeneralCommandLine commandLine = createCommandLine();
-        OSProcessHandler processHandler = ProcessHandlerFactory.getInstance()
-                .createColoredProcessHandler(commandLine);
-        ProcessTerminatedListener.attach(processHandler);
-        return processHandler;
-    }
+	@Override
+	protected @NotNull ProcessHandler startProcess() throws ExecutionException {
+		GeneralCommandLine	commandLine		= createCommandLine();
+		OSProcessHandler	processHandler	= ProcessHandlerFactory.getInstance()
+		    .createColoredProcessHandler( commandLine );
+		ProcessTerminatedListener.attach( processHandler );
+		return processHandler;
+	}
 
-    @Override
-    public @NotNull ExecutionResult execute(@NotNull Executor executor, @NotNull ProgramRunner<?> runner) throws ExecutionException {
-        ProcessHandler processHandler = startProcess();
-        ConsoleView console = createConsole(executor);
-        if (console != null) {
-            console.attachToProcess(processHandler);
-        }
-        return new DefaultExecutionResult(console, processHandler);
-    }
+	@Override
+	public @NotNull ExecutionResult execute( @NotNull Executor executor, @NotNull ProgramRunner<?> runner ) throws ExecutionException {
+		ProcessHandler	processHandler	= startProcess();
+		ConsoleView		console			= createConsole( executor );
+		if ( console != null ) {
+			console.attachToProcess( processHandler );
+		}
+		return new DefaultExecutionResult( console, processHandler );
+	}
 
-    private GeneralCommandLine createCommandLine() throws ExecutionException {
-        Project project = getEnvironment().getProject();
-        BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve(project);
-        
-        LspBootstrapResult bootstrap;
-        try {
-            bootstrap = BoxLangLspBootstrapService.prepare(project);
-        } catch (Exception e) {
-            throw new ExecutionException("Failed to prepare BoxLang runtime: " + e.getMessage(), e);
-        }
+	private GeneralCommandLine createCommandLine() throws ExecutionException {
+		Project					project		= getEnvironment().getProject();
+		BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
 
-        GeneralCommandLine commandLine = new GeneralCommandLine(resolveJavaExecutable(settings));
-        commandLine.withCharset(StandardCharsets.UTF_8);
-        
-        // Set up environment
-        String boxLangHome = configuration.getBoxLangHome();
-        if (boxLangHome == null || boxLangHome.isBlank()) {
-            boxLangHome = bootstrap.lspBoxLangHome.toString();
-        }
-        commandLine.withEnvironment("BOXLANG_HOME", boxLangHome);
-        commandLine.withEnvironment("CLASSPATH", bootstrap.boxLangJarPath.toString());
-        
-        if (settings.javaHome != null && !settings.javaHome.isBlank()) {
-            commandLine.withEnvironment("JAVA_HOME", settings.javaHome);
-        }
+		LspBootstrapResult		bootstrap;
+		try {
+			bootstrap = BoxLangLspBootstrapService.prepare( project );
+		} catch ( Exception e ) {
+			throw new ExecutionException( "Failed to prepare BoxLang runtime: " + e.getMessage(), e );
+		}
 
-        // Set working directory
-        String workingDir = configuration.getWorkingDirectory();
-        if (workingDir != null && !workingDir.isBlank()) {
-            commandLine.withWorkDirectory(workingDir);
-        } else {
-            String projectBasePath = project.getBasePath();
-            if (projectBasePath != null) {
-                commandLine.withWorkDirectory(projectBasePath);
-            }
-        }
+		GeneralCommandLine commandLine = new GeneralCommandLine( resolveJavaExecutable( settings ) );
+		commandLine.withCharset( StandardCharsets.UTF_8 );
 
-        // Add JVM arguments
-        commandLine.addParameters(buildJvmArgs(settings));
+		// Set up environment
+		String boxLangHome = configuration.getBoxLangHome();
+		if ( boxLangHome == null || boxLangHome.isBlank() ) {
+			boxLangHome = bootstrap.lspBoxLangHome.toString();
+		}
+		commandLine.withEnvironment( "BOXLANG_HOME", boxLangHome );
+		commandLine.withEnvironment( "CLASSPATH", bootstrap.boxLangJarPath.toString() );
 
-        // Main class
-        commandLine.addParameter("ortus.boxlang.runtime.BoxRunner");
+		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
+			commandLine.withEnvironment( "JAVA_HOME", settings.javaHome );
+		}
 
-        // Script path - use current file if configured
-        String scriptPath = resolveScriptPath(project);
-        if (scriptPath == null || scriptPath.isBlank()) {
-            throw new ExecutionException("No BoxLang script to run. Please open a BoxLang file or specify a script path.");
-        }
-        commandLine.addParameter(scriptPath);
+		// Set working directory
+		String workingDir = configuration.getWorkingDirectory();
+		if ( workingDir != null && !workingDir.isBlank() ) {
+			commandLine.withWorkDirectory( workingDir );
+		} else {
+			String projectBasePath = project.getBasePath();
+			if ( projectBasePath != null ) {
+				commandLine.withWorkDirectory( projectBasePath );
+			}
+		}
 
-        // Program arguments
-        String programArgs = configuration.getProgramArguments();
-        if (programArgs != null && !programArgs.isBlank()) {
-            commandLine.addParameters(ParametersListUtil.parse(programArgs));
-        }
+		// Add JVM arguments
+		commandLine.addParameters( buildJvmArgs( settings ) );
 
-        return commandLine;
-    }
+		// Main class
+		commandLine.addParameter( "ortus.boxlang.runtime.BoxRunner" );
 
-    private String resolveJavaExecutable(BoxLangResolvedSettings settings) {
-        String javaExecutable = SystemInfo.isWindows ? "java.exe" : "java";
-        
-        // First, try the configured Java home from settings
-        if (settings.javaHome != null && !settings.javaHome.isBlank()) {
-            Path javaPath = Path.of(settings.javaHome, "bin", javaExecutable);
-            if (javaPath.toFile().exists()) {
-                return javaPath.toString();
-            }
-        }
-        
-        // Second, try JAVA_HOME environment variable
-        String javaHomeEnv = System.getenv("JAVA_HOME");
-        if (javaHomeEnv != null && !javaHomeEnv.isBlank()) {
-            Path javaPath = Path.of(javaHomeEnv, "bin", javaExecutable);
-            if (javaPath.toFile().exists()) {
-                return javaPath.toString();
-            }
-        }
-        
-        // Third, try to find Java in the current process (IntelliJ's JDK)
-        String currentJavaHome = System.getProperty("java.home");
-        if (currentJavaHome != null && !currentJavaHome.isBlank()) {
-            Path javaPath = Path.of(currentJavaHome, "bin", javaExecutable);
-            if (javaPath.toFile().exists()) {
-                return javaPath.toString();
-            }
-        }
-        
-        // Last resort - use "java" from PATH and hope it works
-        return "java";
-    }
+		// Script path - use current file if configured
+		String scriptPath = resolveScriptPath( project );
+		if ( scriptPath == null || scriptPath.isBlank() ) {
+			throw new ExecutionException( "No BoxLang script to run. Please open a BoxLang file or specify a script path." );
+		}
+		commandLine.addParameter( scriptPath );
 
-    private List<String> buildJvmArgs(BoxLangResolvedSettings settings) {
-        List<String> args = new ArrayList<>();
-        
-        // Add configuration-specific JVM args first
-        String configJvmArgs = configuration.getJvmArgs();
-        if (configJvmArgs != null && !configJvmArgs.isBlank()) {
-            args.addAll(ParametersListUtil.parse(configJvmArgs));
-        }
-        
-        // Add default heap size if not specified
-        boolean hasHeapSize = args.stream().anyMatch(arg -> arg.startsWith("-Xmx"));
-        if (!hasHeapSize) {
-            int heapSize = settings.lspMaxHeapSize > 0 ? settings.lspMaxHeapSize : 512;
-            args.add("-Xmx" + heapSize + "m");
-        }
-        
-        return args;
-    }
+		// Program arguments
+		String programArgs = configuration.getProgramArguments();
+		if ( programArgs != null && !programArgs.isBlank() ) {
+			commandLine.addParameters( ParametersListUtil.parse( programArgs ) );
+		}
 
-    private String resolveScriptPath(Project project) {
-        // If not using current file, return the configured script path
-        if (!configuration.isUseCurrentFile()) {
-            return configuration.getScriptPath();
-        }
-        
-        // Get the currently open file in the editor
-        VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
-        if (selectedFiles.length == 0) {
-            return null;
-        }
-        
-        VirtualFile currentFile = selectedFiles[0];
-        
-        // Verify it's a BoxLang file
-        if (!BoxLangFileUtil.isBoxLangFile(currentFile)) {
-            return null;
-        }
-        
-        return currentFile.getPath();
-    }
+		return commandLine;
+	}
+
+	private String resolveJavaExecutable( BoxLangResolvedSettings settings ) {
+		String javaExecutable = SystemInfo.isWindows ? "java.exe" : "java";
+
+		// First, try the configured Java home from settings
+		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
+			Path javaPath = Path.of( settings.javaHome, "bin", javaExecutable );
+			if ( javaPath.toFile().exists() ) {
+				return javaPath.toString();
+			}
+		}
+
+		// Second, try JAVA_HOME environment variable
+		String javaHomeEnv = System.getenv( "JAVA_HOME" );
+		if ( javaHomeEnv != null && !javaHomeEnv.isBlank() ) {
+			Path javaPath = Path.of( javaHomeEnv, "bin", javaExecutable );
+			if ( javaPath.toFile().exists() ) {
+				return javaPath.toString();
+			}
+		}
+
+		// Third, try to find Java in the current process (IntelliJ's JDK)
+		String currentJavaHome = System.getProperty( "java.home" );
+		if ( currentJavaHome != null && !currentJavaHome.isBlank() ) {
+			Path javaPath = Path.of( currentJavaHome, "bin", javaExecutable );
+			if ( javaPath.toFile().exists() ) {
+				return javaPath.toString();
+			}
+		}
+
+		// Last resort - use "java" from PATH and hope it works
+		return "java";
+	}
+
+	private List<String> buildJvmArgs( BoxLangResolvedSettings settings ) {
+		List<String>	args			= new ArrayList<>();
+
+		// Add configuration-specific JVM args first
+		String			configJvmArgs	= configuration.getJvmArgs();
+		if ( configJvmArgs != null && !configJvmArgs.isBlank() ) {
+			args.addAll( ParametersListUtil.parse( configJvmArgs ) );
+		}
+
+		// Add default heap size if not specified
+		boolean hasHeapSize = args.stream().anyMatch( arg -> arg.startsWith( "-Xmx" ) );
+		if ( !hasHeapSize ) {
+			int heapSize = settings.lspMaxHeapSize > 0 ? settings.lspMaxHeapSize : 512;
+			args.add( "-Xmx" + heapSize + "m" );
+		}
+
+		return args;
+	}
+
+	private String resolveScriptPath( Project project ) {
+		// If not using current file, return the configured script path
+		if ( !configuration.isUseCurrentFile() ) {
+			return configuration.getScriptPath();
+		}
+
+		// Get the currently open file in the editor
+		VirtualFile[] selectedFiles = FileEditorManager.getInstance( project ).getSelectedFiles();
+		if ( selectedFiles.length == 0 ) {
+			return null;
+		}
+
+		VirtualFile currentFile = selectedFiles[ 0 ];
+
+		// Verify it's a BoxLang file
+		if ( !BoxLangFileUtil.isBoxLangFile( currentFile ) ) {
+			return null;
+		}
+
+		return currentFile.getPath();
+	}
 }

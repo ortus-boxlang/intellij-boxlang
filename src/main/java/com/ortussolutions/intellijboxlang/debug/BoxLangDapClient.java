@@ -14,54 +14,55 @@ import org.eclipse.lsp4j.debug.services.IDebugProtocolClient;
  * Receives DAP events from the debug adapter and forwards relevant events to {@link BoxLangDapService}.
  */
 public class BoxLangDapClient implements IDebugProtocolClient {
-    private final BoxLangDapService service;
 
-    public BoxLangDapClient(BoxLangDapService service) {
-        this.service = service;
-    }
+	private final BoxLangDapService service;
 
-    @Override
-    public void initialized() {
-        service.handleInitialized();
-    }
+	public BoxLangDapClient( BoxLangDapService service ) {
+		this.service = service;
+	}
 
-    @Override
-    public void stopped(StoppedEventArguments args) {
-        service.handleStopped(args);
-    }
+	@Override
+	public void initialized() {
+		service.handleInitialized();
+	}
 
-    @Override
-    public void continued(ContinuedEventArguments args) {
-        service.handleContinued(args);
-    }
+	@Override
+	public void stopped( StoppedEventArguments args ) {
+		service.handleStopped( args );
+	}
 
-    @Override
-    public void exited(ExitedEventArguments args) {
-        service.handleExited(args);
-    }
+	@Override
+	public void continued( ContinuedEventArguments args ) {
+		service.handleContinued( args );
+	}
 
-    @Override
-    public void terminated(TerminatedEventArguments args) {
-        service.handleTerminated(args);
-    }
+	@Override
+	public void exited( ExitedEventArguments args ) {
+		service.handleExited( args );
+	}
 
-    @Override
-    public void thread(ThreadEventArguments args) {
-        service.handleThread(args);
-    }
+	@Override
+	public void terminated( TerminatedEventArguments args ) {
+		service.handleTerminated( args );
+	}
 
-    @Override
-    public void output(OutputEventArguments args) {
-        service.handleOutput(args);
-    }
+	@Override
+	public void thread( ThreadEventArguments args ) {
+		service.handleThread( args );
+	}
 
-    @Override
-    public void breakpoint(BreakpointEventArguments args) {
-        service.handleBreakpoint(args);
-    }
+	@Override
+	public void output( OutputEventArguments args ) {
+		service.handleOutput( args );
+	}
 
-    @Override
-    public void capabilities(CapabilitiesEventArguments args) {
-        service.handleCapabilities(args);
-    }
+	@Override
+	public void breakpoint( BreakpointEventArguments args ) {
+		service.handleBreakpoint( args );
+	}
+
+	@Override
+	public void capabilities( CapabilitiesEventArguments args ) {
+		service.handleCapabilities( args );
+	}
 }

@@ -14,22 +14,22 @@ import org.jetbrains.annotations.Nullable;
  */
 public class BoxLangAttachConfigurationFactory extends ConfigurationFactory {
 
-    public BoxLangAttachConfigurationFactory(@NotNull ConfigurationType type) {
-        super(type);
-    }
+	public BoxLangAttachConfigurationFactory( @NotNull ConfigurationType type ) {
+		super( type );
+	}
 
-    @Override
-    public @NotNull @NonNls String getId() {
-        return BoxLangAttachConfigurationType.ID;
-    }
+	@Override
+	public @NotNull @NonNls String getId() {
+		return BoxLangAttachConfigurationType.ID;
+	}
 
-    @Override
-    public @NotNull RunConfiguration createTemplateConfiguration(@NotNull Project project) {
-        return new BoxLangAttachRunConfiguration(project, this, "BoxLang Attach");
-    }
+	@Override
+	public @NotNull RunConfiguration createTemplateConfiguration( @NotNull Project project ) {
+		return new BoxLangAttachRunConfiguration( project, this, "BoxLang Attach" );
+	}
 
-    @Override
-    public @Nullable Class<? extends BaseState> getOptionsClass() {
-        return BoxLangAttachRunConfigurationOptions.class;
-    }
+	@Override
+	public @Nullable Class<? extends BaseState> getOptionsClass() {
+		return BoxLangAttachRunConfigurationOptions.class;
+	}
 }

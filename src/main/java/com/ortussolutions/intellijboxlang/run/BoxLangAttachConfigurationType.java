@@ -15,30 +15,30 @@ import javax.swing.*;
  */
 public class BoxLangAttachConfigurationType implements ConfigurationType {
 
-    public static final String ID = "BoxLangAttachRunConfiguration";
+	public static final String ID = "BoxLangAttachRunConfiguration";
 
-    @Override
-    public @NotNull @Nls(capitalization = Nls.Capitalization.Title) String getDisplayName() {
-        return "BoxLang Attach";
-    }
+	@Override
+	public @NotNull @Nls( capitalization = Nls.Capitalization.Title ) String getDisplayName() {
+		return "BoxLang Attach";
+	}
 
-    @Override
-    public @Nls(capitalization = Nls.Capitalization.Sentence) String getConfigurationTypeDescription() {
-        return "Attach to a running BoxLang process for debugging";
-    }
+	@Override
+	public @Nls( capitalization = Nls.Capitalization.Sentence ) String getConfigurationTypeDescription() {
+		return "Attach to a running BoxLang process for debugging";
+	}
 
-    @Override
-    public Icon getIcon() {
-        return BoxLangIcons.FILE;
-    }
+	@Override
+	public Icon getIcon() {
+		return BoxLangIcons.FILE;
+	}
 
-    @Override
-    public @NotNull @NonNls String getId() {
-        return ID;
-    }
+	@Override
+	public @NotNull @NonNls String getId() {
+		return ID;
+	}
 
-    @Override
-    public ConfigurationFactory[] getConfigurationFactories() {
-        return new ConfigurationFactory[]{new BoxLangAttachConfigurationFactory(this)};
-    }
+	@Override
+	public ConfigurationFactory[] getConfigurationFactories() {
+		return new ConfigurationFactory[] { new BoxLangAttachConfigurationFactory( this ) };
+	}
 }

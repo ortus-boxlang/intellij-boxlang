@@ -11,46 +11,46 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 public final class BoxLangLspClient implements LanguageClient {
-    private static final Logger LOG = Logger.getInstance(BoxLangLspClient.class);
-    private final BoxLangLspClientService service;
 
-    public BoxLangLspClient(BoxLangLspClientService service) {
-        this.service = service;
-    }
+	private static final Logger				LOG	= Logger.getInstance( BoxLangLspClient.class );
+	private final BoxLangLspClientService	service;
 
-    @Override
-    public void publishDiagnostics(PublishDiagnosticsParams diagnostics) {
-        LOG.debug("Diagnostics: " + diagnostics.getUri());
-        if (diagnostics.getDiagnostics() != null && !diagnostics.getDiagnostics().isEmpty()) {
-            diagnostics.getDiagnostics().forEach(diagnostic ->
-                LOG.debug("Diagnostic: " + diagnostic.getMessage() + " (" + diagnostic.getSeverity() + ")")
-            );
-        }
-        service.updateDiagnostics(diagnostics.getUri(), diagnostics.getDiagnostics());
-    }
+	public BoxLangLspClient( BoxLangLspClientService service ) {
+		this.service = service;
+	}
 
-    @Override
-    public void showMessage(MessageParams messageParams) {
-        LOG.debug("LSP message: " + messageParams.getMessage());
-    }
+	@Override
+	public void publishDiagnostics( PublishDiagnosticsParams diagnostics ) {
+		LOG.debug( "Diagnostics: " + diagnostics.getUri() );
+		if ( diagnostics.getDiagnostics() != null && !diagnostics.getDiagnostics().isEmpty() ) {
+			diagnostics.getDiagnostics().forEach( diagnostic -> LOG.debug( "Diagnostic: " + diagnostic.getMessage() + " (" + diagnostic.getSeverity() + ")" )
+			);
+		}
+		service.updateDiagnostics( diagnostics.getUri(), diagnostics.getDiagnostics() );
+	}
 
-    @Override
-    public CompletableFuture<List<WorkspaceFolder>> workspaceFolders() {
-        return CompletableFuture.completedFuture(List.of());
-    }
+	@Override
+	public void showMessage( MessageParams messageParams ) {
+		LOG.debug( "LSP message: " + messageParams.getMessage() );
+	}
 
-    @Override
-    public void logMessage(MessageParams message) {
-        LOG.debug("LSP log: " + message.getMessage());
-    }
+	@Override
+	public CompletableFuture<List<WorkspaceFolder>> workspaceFolders() {
+		return CompletableFuture.completedFuture( List.of() );
+	}
 
-    @Override
-    public void telemetryEvent(Object object) {
-        LOG.debug("LSP telemetry event received");
-    }
+	@Override
+	public void logMessage( MessageParams message ) {
+		LOG.debug( "LSP log: " + message.getMessage() );
+	}
 
-    @Override
-    public CompletableFuture<MessageActionItem> showMessageRequest(ShowMessageRequestParams requestParams) {
-        return CompletableFuture.completedFuture(null);
-    }
+	@Override
+	public void telemetryEvent( Object object ) {
+		LOG.debug( "LSP telemetry event received" );
+	}
+
+	@Override
+	public CompletableFuture<MessageActionItem> showMessageRequest( ShowMessageRequestParams requestParams ) {
+		return CompletableFuture.completedFuture( null );
+	}
 }

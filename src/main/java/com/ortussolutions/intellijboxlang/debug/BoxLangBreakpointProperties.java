@@ -9,68 +9,68 @@ import org.jetbrains.annotations.Nullable;
  */
 public class BoxLangBreakpointProperties extends XBreakpointProperties<BoxLangBreakpointProperties> {
 
-    /**
-     * Optional condition expression for conditional breakpoints.
-     */
-    private String condition;
+	/**
+	 * Optional condition expression for conditional breakpoints.
+	 */
+	private String	condition;
 
-    /**
-     * Optional hit count - breakpoint triggers after this many hits.
-     */
-    private int hitCount = 0;
+	/**
+	 * Optional hit count - breakpoint triggers after this many hits.
+	 */
+	private int		hitCount	= 0;
 
-    /**
-     * Optional log expression - logs this expression instead of breaking.
-     */
-    private String logExpression;
+	/**
+	 * Optional log expression - logs this expression instead of breaking.
+	 */
+	private String	logExpression;
 
-    public BoxLangBreakpointProperties() {
-    }
+	public BoxLangBreakpointProperties() {
+	}
 
-    @Nullable
-    public String getCondition() {
-        return condition;
-    }
+	@Nullable
+	public String getCondition() {
+		return condition;
+	}
 
-    public void setCondition(@Nullable String condition) {
-        this.condition = condition;
-    }
+	public void setCondition( @Nullable String condition ) {
+		this.condition = condition;
+	}
 
-    public int getHitCount() {
-        return hitCount;
-    }
+	public int getHitCount() {
+		return hitCount;
+	}
 
-    public void setHitCount(int hitCount) {
-        this.hitCount = hitCount;
-    }
+	public void setHitCount( int hitCount ) {
+		this.hitCount = hitCount;
+	}
 
-    @Nullable
-    public String getLogExpression() {
-        return logExpression;
-    }
+	@Nullable
+	public String getLogExpression() {
+		return logExpression;
+	}
 
-    public void setLogExpression(@Nullable String logExpression) {
-        this.logExpression = logExpression;
-    }
+	public void setLogExpression( @Nullable String logExpression ) {
+		this.logExpression = logExpression;
+	}
 
-    /**
-     * Returns the state to be persisted.
-     */
-    @Nullable
-    @Override
-    public BoxLangBreakpointProperties getState() {
-        return this;
-    }
+	/**
+	 * Returns the state to be persisted.
+	 */
+	@Nullable
+	@Override
+	public BoxLangBreakpointProperties getState() {
+		return this;
+	}
 
-    /**
-     * Loads the state from a persisted instance.
-     */
-    @Override
-    public void loadState(@Nullable BoxLangBreakpointProperties state) {
-        if (state != null) {
-            this.condition = state.condition;
-            this.hitCount = state.hitCount;
-            this.logExpression = state.logExpression;
-        }
-    }
+	/**
+	 * Loads the state from a persisted instance.
+	 */
+	@Override
+	public void loadState( @Nullable BoxLangBreakpointProperties state ) {
+		if ( state != null ) {
+			this.condition		= state.condition;
+			this.hitCount		= state.hitCount;
+			this.logExpression	= state.logExpression;
+		}
+	}
 }

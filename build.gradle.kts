@@ -2,6 +2,7 @@ plugins {
   id("java")
   id("org.jetbrains.kotlin.jvm") version "1.9.25"
   id("org.jetbrains.intellij.platform") version "2.3.0"
+  id("com.diffplug.spotless") version "8.2.1"
 }
 
 group = "com.ortussolutions"
@@ -43,6 +44,27 @@ intellijPlatform {
   }
 }
 
+spotless {
+  java {
+    target(
+      fileTree(".") {
+        include("**/*.java")
+        exclude(
+          "**/build/**",
+          "bin/**",
+          "examples/**",
+          "src/main/java/ortus/boxlang/runtime/testing/**",
+          "src/main/gen/**",
+          "src/main/antlr/gen",
+          "modules/**"
+        )
+      }
+    )
+    eclipse().configFile("workbench/ortus-java-style.xml")
+    toggleOffOn()
+  }
+}
+
 tasks {
   // Set the JVM compatibility versions
   withType<JavaCompile> {
@@ -52,4 +74,8 @@ tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions.jvmTarget = "21"
   }
+}
+
+tasks.named("check") {
+  dependsOn("spotlessCheck")
 }

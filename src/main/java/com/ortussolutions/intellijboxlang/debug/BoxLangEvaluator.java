@@ -21,104 +21,106 @@ import org.jetbrains.annotations.Nullable;
  * the expression in the context of the current stack frame.
  */
 public class BoxLangEvaluator extends XDebuggerEvaluator {
-    private final BoxLangDebugProcess debugProcess;
-    private final int frameId;
 
-    public BoxLangEvaluator(@NotNull BoxLangDebugProcess debugProcess, int frameId) {
-        this.debugProcess = debugProcess;
-        this.frameId = frameId;
-    }
+	private final BoxLangDebugProcess	debugProcess;
+	private final int					frameId;
 
-    @Override
-    public void evaluate(@NotNull String expression,
-                          @NotNull XEvaluationCallback callback,
-                          @Nullable XSourcePosition expressionPosition) {
-        BoxLangDapService dapService = debugProcess.getDapService();
-        if (!dapService.isConnected()) {
-            callback.errorOccurred("Debug session is not connected");
-            return;
-        }
+	public BoxLangEvaluator( @NotNull BoxLangDebugProcess debugProcess, int frameId ) {
+		this.debugProcess	= debugProcess;
+		this.frameId		= frameId;
+	}
 
-        // Determine evaluation context based on where it's being evaluated
-        // "watch" for watch panel, "repl" for console, "hover" for editor hover
-        String context = "watch";
+	@Override
+	public void evaluate( @NotNull String expression,
+	    @NotNull XEvaluationCallback callback,
+	    @Nullable XSourcePosition expressionPosition ) {
+		BoxLangDapService dapService = debugProcess.getDapService();
+		if ( !dapService.isConnected() ) {
+			callback.errorOccurred( "Debug session is not connected" );
+			return;
+		}
 
-        dapService.evaluate(expression, frameId, context)
-            .thenAccept(response -> {
-                if (response == null) {
-                    callback.errorOccurred("No response from debugger");
-                    return;
-                }
+		// Determine evaluation context based on where it's being evaluated
+		// "watch" for watch panel, "repl" for console, "hover" for editor hover
+		String context = "watch";
 
-                // Create an XValue from the evaluate response
-                callback.evaluated(new EvaluateResultValue(debugProcess, expression, response));
-            })
-            .exceptionally(ex -> {
-                String message = ex.getMessage();
-                if (ex.getCause() != null) {
-                    message = ex.getCause().getMessage();
-                }
-                callback.errorOccurred(message != null ? message : "Evaluation failed");
-                return null;
-            });
-    }
+		dapService.evaluate( expression, frameId, context )
+		    .thenAccept( response -> {
+			    if ( response == null ) {
+				    callback.errorOccurred( "No response from debugger" );
+				    return;
+			    }
 
-    /**
-     * XValue wrapper for DAP evaluate response.
-     * Displays the result and supports expanding if it has child variables.
-     */
-    private static class EvaluateResultValue extends XValue {
-        private final BoxLangDebugProcess debugProcess;
-        private final String expression;
-        private final EvaluateResponse response;
+			    // Create an XValue from the evaluate response
+			    callback.evaluated( new EvaluateResultValue( debugProcess, expression, response ) );
+		    } )
+		    .exceptionally( ex -> {
+			    String message = ex.getMessage();
+			    if ( ex.getCause() != null ) {
+				    message = ex.getCause().getMessage();
+			    }
+			    callback.errorOccurred( message != null ? message : "Evaluation failed" );
+			    return null;
+		    } );
+	}
 
-        EvaluateResultValue(@NotNull BoxLangDebugProcess debugProcess,
-                             @NotNull String expression,
-                             @NotNull EvaluateResponse response) {
-            this.debugProcess = debugProcess;
-            this.expression = expression;
-            this.response = response;
-        }
+	/**
+	 * XValue wrapper for DAP evaluate response.
+	 * Displays the result and supports expanding if it has child variables.
+	 */
+	private static class EvaluateResultValue extends XValue {
 
-        @Override
-        public void computePresentation(@NotNull XValueNode node, @NotNull XValuePlace place) {
-            String value = response.getResult() != null ? response.getResult() : "";
-            String type = response.getType();
-            boolean hasChildren = response.getVariablesReference() > 0;
+		private final BoxLangDebugProcess	debugProcess;
+		private final String				expression;
+		private final EvaluateResponse		response;
 
-            node.setPresentation(null, type, value, hasChildren);
-        }
+		EvaluateResultValue( @NotNull BoxLangDebugProcess debugProcess,
+		    @NotNull String expression,
+		    @NotNull EvaluateResponse response ) {
+			this.debugProcess	= debugProcess;
+			this.expression		= expression;
+			this.response		= response;
+		}
 
-        @Override
-        public void computeChildren(@NotNull XCompositeNode node) {
-            int ref = response.getVariablesReference();
-            if (ref <= 0) {
-                node.addChildren(XValueChildrenList.EMPTY, true);
-                return;
-            }
+		@Override
+		public void computePresentation( @NotNull XValueNode node, @NotNull XValuePlace place ) {
+			String	value		= response.getResult() != null ? response.getResult() : "";
+			String	type		= response.getType();
+			boolean	hasChildren	= response.getVariablesReference() > 0;
 
-            BoxLangDapService dapService = debugProcess.getDapService();
-            if (!dapService.isConnected()) {
-                node.addChildren(XValueChildrenList.EMPTY, true);
-                return;
-            }
+			node.setPresentation( null, type, value, hasChildren );
+		}
 
-            dapService.variables(ref)
-                .thenAccept(variablesResponse -> {
-                    XValueChildrenList children = new XValueChildrenList();
+		@Override
+		public void computeChildren( @NotNull XCompositeNode node ) {
+			int ref = response.getVariablesReference();
+			if ( ref <= 0 ) {
+				node.addChildren( XValueChildrenList.EMPTY, true );
+				return;
+			}
 
-                    if (variablesResponse != null && variablesResponse.getVariables() != null) {
-                        for (Variable childVar : variablesResponse.getVariables()) {
-                            children.add(new BoxLangNamedValue(debugProcess, childVar));
-                        }
-                    }
+			BoxLangDapService dapService = debugProcess.getDapService();
+			if ( !dapService.isConnected() ) {
+				node.addChildren( XValueChildrenList.EMPTY, true );
+				return;
+			}
 
-                    node.addChildren(children, true);
-                })
-                .exceptionally(ex -> {
-                    node.addChildren(XValueChildrenList.EMPTY, true);
-                    return null;
-                });
-        }
-    }
+			dapService.variables( ref )
+			    .thenAccept( variablesResponse -> {
+				    XValueChildrenList children = new XValueChildrenList();
+
+				    if ( variablesResponse != null && variablesResponse.getVariables() != null ) {
+					    for ( Variable childVar : variablesResponse.getVariables() ) {
+						    children.add( new BoxLangNamedValue( debugProcess, childVar ) );
+					    }
+				    }
+
+				    node.addChildren( children, true );
+			    } )
+			    .exceptionally( ex -> {
+				    node.addChildren( XValueChildrenList.EMPTY, true );
+				    return null;
+			    } );
+		}
+	}
 }

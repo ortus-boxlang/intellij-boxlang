@@ -17,16 +17,16 @@ import org.jetbrains.annotations.Nullable;
  */
 public class BoxLangDebuggerEditorsProvider extends XDebuggerEditorsProvider {
 
-    @Override
-    public @NotNull FileType getFileType() {
-        return BoxLangFileType.INSTANCE;
-    }
+	@Override
+	public @NotNull FileType getFileType() {
+		return BoxLangFileType.INSTANCE;
+	}
 
-    @Override
-    public @NotNull Document createDocument(@NotNull Project project,
-                                             @NotNull String text,
-                                             @Nullable XSourcePosition sourcePosition,
-                                             @NotNull EvaluationMode mode) {
-        return EditorFactory.getInstance().createDocument(text);
-    }
+	@Override
+	public @NotNull Document createDocument( @NotNull Project project,
+	    @NotNull String text,
+	    @Nullable XSourcePosition sourcePosition,
+	    @NotNull EvaluationMode mode ) {
+		return EditorFactory.getInstance().createDocument( text );
+	}
 }

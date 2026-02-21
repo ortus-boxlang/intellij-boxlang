@@ -18,95 +18,97 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangStructureViewSymbolElement implements StructureViewTreeElement {
-    private final PsiFile psiFile;
-    private final DocumentSymbol symbol;
 
-    public BoxLangStructureViewSymbolElement(PsiFile psiFile, DocumentSymbol symbol) {
-        this.psiFile = psiFile;
-        this.symbol = symbol;
-    }
+	private final PsiFile			psiFile;
+	private final DocumentSymbol	symbol;
 
-    @Override
-    public Object getValue() {
-        return symbol;
-    }
+	public BoxLangStructureViewSymbolElement( PsiFile psiFile, DocumentSymbol symbol ) {
+		this.psiFile	= psiFile;
+		this.symbol		= symbol;
+	}
 
-    @Override
-    public void navigate(boolean requestFocus) {
-        Range range = symbol.getSelectionRange();
-        if (range == null || psiFile.getVirtualFile() == null) {
-            return;
-        }
-        Document document = PsiDocumentManager.getInstance(psiFile.getProject()).getDocument(psiFile);
-        if (document == null) {
-            return;
-        }
-        int line = range.getStart().getLine();
-        int character = range.getStart().getCharacter();
-        if (line >= document.getLineCount()) {
-            return;
-        }
-        int offset = Math.min(document.getLineStartOffset(line) + character, document.getTextLength());
-        new OpenFileDescriptor(psiFile.getProject(), psiFile.getVirtualFile(), offset).navigate(requestFocus);
-    }
+	@Override
+	public Object getValue() {
+		return symbol;
+	}
 
-    @Override
-    public boolean canNavigate() {
-        return psiFile.isValid();
-    }
+	@Override
+	public void navigate( boolean requestFocus ) {
+		Range range = symbol.getSelectionRange();
+		if ( range == null || psiFile.getVirtualFile() == null ) {
+			return;
+		}
+		Document document = PsiDocumentManager.getInstance( psiFile.getProject() ).getDocument( psiFile );
+		if ( document == null ) {
+			return;
+		}
+		int	line		= range.getStart().getLine();
+		int	character	= range.getStart().getCharacter();
+		if ( line >= document.getLineCount() ) {
+			return;
+		}
+		int offset = Math.min( document.getLineStartOffset( line ) + character, document.getTextLength() );
+		new OpenFileDescriptor( psiFile.getProject(), psiFile.getVirtualFile(), offset ).navigate( requestFocus );
+	}
 
-    @Override
-    public boolean canNavigateToSource() {
-        return true;
-    }
+	@Override
+	public boolean canNavigate() {
+		return psiFile.isValid();
+	}
 
-    @Override
-    public StructureViewTreeElement @NotNull [] getChildren() {
-        if (symbol.getChildren() == null || symbol.getChildren().isEmpty()) {
-            return new StructureViewTreeElement[0];
-        }
-        List<StructureViewTreeElement> children = new ArrayList<>();
-        for (DocumentSymbol child : symbol.getChildren()) {
-            children.add(new BoxLangStructureViewSymbolElement(psiFile, child));
-        }
-        return children.toArray(new StructureViewTreeElement[0]);
-    }
+	@Override
+	public boolean canNavigateToSource() {
+		return true;
+	}
 
-    public boolean hasChildren() {
-        return symbol.getChildren() != null && !symbol.getChildren().isEmpty();
-    }
+	@Override
+	public StructureViewTreeElement @NotNull [] getChildren() {
+		if ( symbol.getChildren() == null || symbol.getChildren().isEmpty() ) {
+			return new StructureViewTreeElement[ 0 ];
+		}
+		List<StructureViewTreeElement> children = new ArrayList<>();
+		for ( DocumentSymbol child : symbol.getChildren() ) {
+			children.add( new BoxLangStructureViewSymbolElement( psiFile, child ) );
+		}
+		return children.toArray( new StructureViewTreeElement[ 0 ] );
+	}
 
-    @Override
-    public @NotNull ItemPresentation getPresentation() {
-        return new ItemPresentation() {
-            @Override
-            public @Nullable String getPresentableText() {
-                return symbol.getName();
-            }
+	public boolean hasChildren() {
+		return symbol.getChildren() != null && !symbol.getChildren().isEmpty();
+	}
 
-            @Override
-            public @Nullable Icon getIcon(boolean unused) {
-                return iconFor(symbol.getKind());
-            }
+	@Override
+	public @NotNull ItemPresentation getPresentation() {
+		return new ItemPresentation() {
 
-            @Override
-            public @Nullable String getLocationString() {
-                return symbol.getDetail();
-            }
-        };
-    }
+			@Override
+			public @Nullable String getPresentableText() {
+				return symbol.getName();
+			}
 
-    private Icon iconFor(SymbolKind kind) {
-        if (kind == null) {
-            return AllIcons.Nodes.Variable;
-        }
-        return switch (kind) {
-            case Class, Interface, Struct -> AllIcons.Nodes.Class;
-            case Method, Function, Constructor -> AllIcons.Nodes.Method;
-            case Property, Field -> AllIcons.Nodes.Field;
-            case Variable, Constant -> AllIcons.Nodes.Variable;
-            case Namespace, Package, Module -> AllIcons.Nodes.Package;
-            default -> AllIcons.Nodes.Variable;
-        };
-    }
+			@Override
+			public @Nullable Icon getIcon( boolean unused ) {
+				return iconFor( symbol.getKind() );
+			}
+
+			@Override
+			public @Nullable String getLocationString() {
+				return symbol.getDetail();
+			}
+		};
+	}
+
+	private Icon iconFor( SymbolKind kind ) {
+		if ( kind == null ) {
+			return AllIcons.Nodes.Variable;
+		}
+		return switch ( kind ) {
+			case Class, Interface, Struct -> AllIcons.Nodes.Class;
+			case Method, Function, Constructor -> AllIcons.Nodes.Method;
+			case Property, Field -> AllIcons.Nodes.Field;
+			case Variable, Constant -> AllIcons.Nodes.Variable;
+			case Namespace, Package, Module -> AllIcons.Nodes.Package;
+			default -> AllIcons.Nodes.Variable;
+		};
+	}
 }

@@ -14,98 +14,98 @@ import org.jetbrains.annotations.Nullable;
  */
 public class BoxLangRunConfiguration extends RunConfigurationBase<BoxLangRunConfigurationOptions> {
 
-    protected BoxLangRunConfiguration(@NotNull Project project,
-                                       @NotNull ConfigurationFactory factory,
-                                       @Nullable String name) {
-        super(project, factory, name);
-    }
+	protected BoxLangRunConfiguration( @NotNull Project project,
+	    @NotNull ConfigurationFactory factory,
+	    @Nullable String name ) {
+		super( project, factory, name );
+	}
 
-    @Override
-    protected @NotNull BoxLangRunConfigurationOptions getOptions() {
-        return (BoxLangRunConfigurationOptions) super.getOptions();
-    }
+	@Override
+	protected @NotNull BoxLangRunConfigurationOptions getOptions() {
+		return ( BoxLangRunConfigurationOptions ) super.getOptions();
+	}
 
-    public String getScriptPath() {
-        return getOptions().getScriptPath();
-    }
+	public String getScriptPath() {
+		return getOptions().getScriptPath();
+	}
 
-    public void setScriptPath(String path) {
-        getOptions().setScriptPath(path);
-    }
+	public void setScriptPath( String path ) {
+		getOptions().setScriptPath( path );
+	}
 
-    public boolean isUseCurrentFile() {
-        return getOptions().isUseCurrentFile();
-    }
+	public boolean isUseCurrentFile() {
+		return getOptions().isUseCurrentFile();
+	}
 
-    public void setUseCurrentFile(boolean use) {
-        getOptions().setUseCurrentFile(use);
-    }
+	public void setUseCurrentFile( boolean use ) {
+		getOptions().setUseCurrentFile( use );
+	}
 
-    public String getWorkingDirectory() {
-        return getOptions().getWorkingDirectory();
-    }
+	public String getWorkingDirectory() {
+		return getOptions().getWorkingDirectory();
+	}
 
-    public void setWorkingDirectory(String directory) {
-        getOptions().setWorkingDirectory(directory);
-    }
+	public void setWorkingDirectory( String directory ) {
+		getOptions().setWorkingDirectory( directory );
+	}
 
-    public String getProgramArguments() {
-        return getOptions().getProgramArguments();
-    }
+	public String getProgramArguments() {
+		return getOptions().getProgramArguments();
+	}
 
-    public void setProgramArguments(String arguments) {
-        getOptions().setProgramArguments(arguments);
-    }
+	public void setProgramArguments( String arguments ) {
+		getOptions().setProgramArguments( arguments );
+	}
 
-    public String getEnvironmentVariables() {
-        return getOptions().getEnvironmentVariables();
-    }
+	public String getEnvironmentVariables() {
+		return getOptions().getEnvironmentVariables();
+	}
 
-    public void setEnvironmentVariables(String variables) {
-        getOptions().setEnvironmentVariables(variables);
-    }
+	public void setEnvironmentVariables( String variables ) {
+		getOptions().setEnvironmentVariables( variables );
+	}
 
-    public String getBoxLangHome() {
-        return getOptions().getBoxLangHome();
-    }
+	public String getBoxLangHome() {
+		return getOptions().getBoxLangHome();
+	}
 
-    public void setBoxLangHome(String home) {
-        getOptions().setBoxLangHome(home);
-    }
+	public void setBoxLangHome( String home ) {
+		getOptions().setBoxLangHome( home );
+	}
 
-    public String getJvmArgs() {
-        return getOptions().getJvmArgs();
-    }
+	public String getJvmArgs() {
+		return getOptions().getJvmArgs();
+	}
 
-    public void setJvmArgs(String args) {
-        getOptions().setJvmArgs(args);
-    }
+	public void setJvmArgs( String args ) {
+		getOptions().setJvmArgs( args );
+	}
 
-    @Override
-    public @NotNull SettingsEditor<? extends RunConfiguration> getConfigurationEditor() {
-        return new BoxLangRunConfigurationEditor(getProject());
-    }
+	@Override
+	public @NotNull SettingsEditor<? extends RunConfiguration> getConfigurationEditor() {
+		return new BoxLangRunConfigurationEditor( getProject() );
+	}
 
-    @Override
-    public void checkConfiguration() throws RuntimeConfigurationException {
-        // If using current file, validation happens at runtime
-        if (isUseCurrentFile()) {
-            return;
-        }
+	@Override
+	public void checkConfiguration() throws RuntimeConfigurationException {
+		// If using current file, validation happens at runtime
+		if ( isUseCurrentFile() ) {
+			return;
+		}
 
-        String scriptPath = getScriptPath();
-        if (scriptPath == null || scriptPath.isBlank()) {
-            throw new RuntimeConfigurationError("Script path is not specified");
-        }
-        java.nio.file.Path path = java.nio.file.Path.of(scriptPath);
-        if (!java.nio.file.Files.exists(path)) {
-            throw new RuntimeConfigurationError("Script file does not exist: " + scriptPath);
-        }
-    }
+		String scriptPath = getScriptPath();
+		if ( scriptPath == null || scriptPath.isBlank() ) {
+			throw new RuntimeConfigurationError( "Script path is not specified" );
+		}
+		java.nio.file.Path path = java.nio.file.Path.of( scriptPath );
+		if ( !java.nio.file.Files.exists( path ) ) {
+			throw new RuntimeConfigurationError( "Script file does not exist: " + scriptPath );
+		}
+	}
 
-    @Override
-    public @Nullable RunProfileState getState(@NotNull Executor executor,
-                                               @NotNull ExecutionEnvironment environment) throws ExecutionException {
-        return new BoxLangRunProfileState(this, environment);
-    }
+	@Override
+	public @Nullable RunProfileState getState( @NotNull Executor executor,
+	    @NotNull ExecutionEnvironment environment ) throws ExecutionException {
+		return new BoxLangRunProfileState( this, environment );
+	}
 }

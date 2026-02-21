@@ -7,14 +7,15 @@ import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangStructureViewBuilder extends TreeBasedStructureViewBuilder {
-    private final PsiFile psiFile;
 
-    public BoxLangStructureViewBuilder(PsiFile psiFile) {
-        this.psiFile = psiFile;
-    }
+	private final PsiFile psiFile;
 
-    @Override
-    public @NotNull StructureViewModel createStructureViewModel(Editor editor) {
-        return new BoxLangStructureViewModel(psiFile);
-    }
+	public BoxLangStructureViewBuilder( PsiFile psiFile ) {
+		this.psiFile = psiFile;
+	}
+
+	@Override
+	public @NotNull StructureViewModel createStructureViewModel( Editor editor ) {
+		return new BoxLangStructureViewModel( psiFile );
+	}
 }

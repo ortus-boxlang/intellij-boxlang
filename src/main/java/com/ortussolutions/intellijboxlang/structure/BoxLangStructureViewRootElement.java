@@ -16,62 +16,64 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangStructureViewRootElement implements StructureViewTreeElement {
-    private final PsiFile psiFile;
 
-    public BoxLangStructureViewRootElement(PsiFile psiFile) {
-        this.psiFile = psiFile;
-    }
+	private final PsiFile psiFile;
 
-    @Override
-    public Object getValue() {
-        return psiFile;
-    }
+	public BoxLangStructureViewRootElement( PsiFile psiFile ) {
+		this.psiFile = psiFile;
+	}
 
-    @Override
-    public void navigate(boolean requestFocus) {
-        if (psiFile.isValid()) {
-            psiFile.navigate(requestFocus);
-        }
-    }
+	@Override
+	public Object getValue() {
+		return psiFile;
+	}
 
-    @Override
-    public boolean canNavigate() {
-        return psiFile.isValid();
-    }
+	@Override
+	public void navigate( boolean requestFocus ) {
+		if ( psiFile.isValid() ) {
+			psiFile.navigate( requestFocus );
+		}
+	}
 
-    @Override
-    public boolean canNavigateToSource() {
-        return true;
-    }
+	@Override
+	public boolean canNavigate() {
+		return psiFile.isValid();
+	}
 
-    @Override
-    public StructureViewTreeElement @NotNull [] getChildren() {
-        Project project = psiFile.getProject();
-        Document document = PsiDocumentManager.getInstance(project).getDocument(psiFile);
-        if (document == null || psiFile.getVirtualFile() == null) {
-            return new StructureViewTreeElement[0];
-        }
-        BoxLangLspClientService service = BoxLangLspClientService.getInstance(project);
-        List<DocumentSymbol> symbols = service.requestDocumentSymbols(psiFile.getVirtualFile(), document);
-        List<StructureViewTreeElement> children = new ArrayList<>();
-        for (DocumentSymbol symbol : symbols) {
-            children.add(new BoxLangStructureViewSymbolElement(psiFile, symbol));
-        }
-        return children.toArray(new StructureViewTreeElement[0]);
-    }
+	@Override
+	public boolean canNavigateToSource() {
+		return true;
+	}
 
-    @Override
-    public @NotNull ItemPresentation getPresentation() {
-        return new ItemPresentation() {
-            @Override
-            public @Nullable String getPresentableText() {
-                return psiFile.getName();
-            }
+	@Override
+	public StructureViewTreeElement @NotNull [] getChildren() {
+		Project		project		= psiFile.getProject();
+		Document	document	= PsiDocumentManager.getInstance( project ).getDocument( psiFile );
+		if ( document == null || psiFile.getVirtualFile() == null ) {
+			return new StructureViewTreeElement[ 0 ];
+		}
+		BoxLangLspClientService			service		= BoxLangLspClientService.getInstance( project );
+		List<DocumentSymbol>			symbols		= service.requestDocumentSymbols( psiFile.getVirtualFile(), document );
+		List<StructureViewTreeElement>	children	= new ArrayList<>();
+		for ( DocumentSymbol symbol : symbols ) {
+			children.add( new BoxLangStructureViewSymbolElement( psiFile, symbol ) );
+		}
+		return children.toArray( new StructureViewTreeElement[ 0 ] );
+	}
 
-            @Override
-            public @Nullable Icon getIcon(boolean unused) {
-                return BoxLangIcons.FILE;
-            }
-        };
-    }
+	@Override
+	public @NotNull ItemPresentation getPresentation() {
+		return new ItemPresentation() {
+
+			@Override
+			public @Nullable String getPresentableText() {
+				return psiFile.getName();
+			}
+
+			@Override
+			public @Nullable Icon getIcon( boolean unused ) {
+				return BoxLangIcons.FILE;
+			}
+		};
+	}
 }

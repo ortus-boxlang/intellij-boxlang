@@ -12,8 +12,8 @@ import java.io.OutputStream;
  * Unlike a normal ProcessHandler that wraps an OS process and terminates when that process exits,
  * this handler stays alive as long as the DAP debug session is active. It terminates only when:
  * <ul>
- *   <li>The DAP server sends a "terminated" or "exited" event</li>
- *   <li>The user explicitly stops the debug session</li>
+ * <li>The DAP server sends a "terminated" or "exited" event</li>
+ * <li>The user explicitly stops the debug session</li>
  * </ul>
  * <p>
  * This solves the root cause of premature debug session termination: previously, the debug session
@@ -24,80 +24,81 @@ import java.io.OutputStream;
  * This handler also receives DAP output events and forwards them to IntelliJ's console.
  */
 public class BoxLangDapProcessHandler extends ProcessHandler {
-    private volatile boolean destroyed = false;
 
-    public BoxLangDapProcessHandler() {
-    }
+	private volatile boolean destroyed = false;
 
-    /**
-     * Called when the debug session starts. Signals that the process is "started".
-     */
-    public void startNotified() {
-        super.startNotify();
-    }
+	public BoxLangDapProcessHandler() {
+	}
 
-    @Override
-    protected void destroyProcessImpl() {
-        destroyed = true;
-        notifyProcessTerminated(0);
-    }
+	/**
+	 * Called when the debug session starts. Signals that the process is "started".
+	 */
+	public void startNotified() {
+		super.startNotify();
+	}
 
-    @Override
-    protected void detachProcessImpl() {
-        destroyed = true;
-        notifyProcessDetached();
-    }
+	@Override
+	protected void destroyProcessImpl() {
+		destroyed = true;
+		notifyProcessTerminated( 0 );
+	}
 
-    @Override
-    public boolean detachIsDefault() {
-        return false;
-    }
+	@Override
+	protected void detachProcessImpl() {
+		destroyed = true;
+		notifyProcessDetached();
+	}
 
-    @Override
-    public @Nullable OutputStream getProcessInput() {
-        // No direct process input - all communication goes through DAP protocol
-        return null;
-    }
+	@Override
+	public boolean detachIsDefault() {
+		return false;
+	}
 
-    /**
-     * Called when the DAP server sends a "terminated" event.
-     * This signals that the debugged program has finished and the debug session should end.
-     */
-    public void onDapTerminated() {
-        if (destroyed) {
-            return;
-        }
-        destroyed = true;
-        notifyProcessTerminated(0);
-    }
+	@Override
+	public @Nullable OutputStream getProcessInput() {
+		// No direct process input - all communication goes through DAP protocol
+		return null;
+	}
 
-    /**
-     * Called when the DAP server sends an "exited" event with an exit code.
-     * We store the exit code but don't terminate yet - wait for the "terminated" event.
-     */
-    public void onDapExited(int exitCode) {
-        if (!destroyed) {
-            destroyed = true;
-            notifyProcessTerminated(exitCode);
-        }
-    }
+	/**
+	 * Called when the DAP server sends a "terminated" event.
+	 * This signals that the debugged program has finished and the debug session should end.
+	 */
+	public void onDapTerminated() {
+		if ( destroyed ) {
+			return;
+		}
+		destroyed = true;
+		notifyProcessTerminated( 0 );
+	}
 
-    /**
-     * Forwards DAP output to IntelliJ's console.
-     *
-     * @param text     The output text
-     * @param category The DAP output category ("stdout", "stderr", "console", etc.)
-     */
-    public void onDapOutput(String text, String category) {
-        if (destroyed || text == null) {
-            return;
-        }
+	/**
+	 * Called when the DAP server sends an "exited" event with an exit code.
+	 * We store the exit code but don't terminate yet - wait for the "terminated" event.
+	 */
+	public void onDapExited( int exitCode ) {
+		if ( !destroyed ) {
+			destroyed = true;
+			notifyProcessTerminated( exitCode );
+		}
+	}
 
-        ProcessOutputType outputType = switch (category) {
-            case "stderr" -> ProcessOutputType.STDERR;
-            case "console", "important" -> ProcessOutputType.SYSTEM;
-            default -> ProcessOutputType.STDOUT;
-        };
-        notifyTextAvailable(text, outputType);
-    }
+	/**
+	 * Forwards DAP output to IntelliJ's console.
+	 *
+	 * @param text     The output text
+	 * @param category The DAP output category ("stdout", "stderr", "console", etc.)
+	 */
+	public void onDapOutput( String text, String category ) {
+		if ( destroyed || text == null ) {
+			return;
+		}
+
+		ProcessOutputType outputType = switch ( category ) {
+			case "stderr" -> ProcessOutputType.STDERR;
+			case "console", "important" -> ProcessOutputType.SYSTEM;
+			default -> ProcessOutputType.STDOUT;
+		};
+		notifyTextAvailable( text, outputType );
+	}
 }

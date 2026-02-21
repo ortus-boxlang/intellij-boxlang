@@ -23,225 +23,228 @@ import java.util.concurrent.ConcurrentHashMap;
  * Converts IntelliJ breakpoints to DAP breakpoints and sends them to the server.
  */
 public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint<BoxLangBreakpointProperties>> {
-    private static final Logger LOG = Logger.getInstance(BoxLangBreakpointHandler.class);
 
-    private final BoxLangDebugProcess debugProcess;
+	private static final Logger														LOG						= Logger
+	    .getInstance( BoxLangBreakpointHandler.class );
 
-    // Track breakpoints by file path for efficient updates
-    private final Map<String, Set<XLineBreakpoint<BoxLangBreakpointProperties>>> breakpointsByFile = new ConcurrentHashMap<>();
+	private final BoxLangDebugProcess												debugProcess;
 
-    // Track whether initial configuration is complete - before this, don't send breakpoints individually
-    private volatile boolean configurationComplete = false;
+	// Track breakpoints by file path for efficient updates
+	private final Map<String, Set<XLineBreakpoint<BoxLangBreakpointProperties>>>	breakpointsByFile		= new ConcurrentHashMap<>();
 
-    public BoxLangBreakpointHandler(@NotNull BoxLangDebugProcess debugProcess) {
-        super(BoxLangLineBreakpointType.class);
-        this.debugProcess = debugProcess;
-    }
+	// Track whether initial configuration is complete - before this, don't send breakpoints individually
+	private volatile boolean														configurationComplete	= false;
 
-    @Override
-    public void registerBreakpoint(@NotNull XLineBreakpoint<BoxLangBreakpointProperties> breakpoint) {
-        XSourcePosition position = breakpoint.getSourcePosition();
-        if (position == null) {
-            LOG.warn("Cannot register breakpoint without source position");
-            return;
-        }
+	public BoxLangBreakpointHandler( @NotNull BoxLangDebugProcess debugProcess ) {
+		super( BoxLangLineBreakpointType.class );
+		this.debugProcess = debugProcess;
+	}
 
-        VirtualFile file = position.getFile();
-        String filePath = file.getPath();
+	@Override
+	public void registerBreakpoint( @NotNull XLineBreakpoint<BoxLangBreakpointProperties> breakpoint ) {
+		XSourcePosition position = breakpoint.getSourcePosition();
+		if ( position == null ) {
+			LOG.warn( "Cannot register breakpoint without source position" );
+			return;
+		}
 
-        breakpointsByFile.computeIfAbsent(filePath, k -> ConcurrentHashMap.newKeySet()).add(breakpoint);
-        if (configurationComplete) {
-            pushBreakpoints(filePath);
-        }
-    }
+		VirtualFile	file		= position.getFile();
+		String		filePath	= file.getPath();
 
-    @Override
-    public void unregisterBreakpoint(@NotNull XLineBreakpoint<BoxLangBreakpointProperties> breakpoint, boolean temporary) {
-        XSourcePosition position = breakpoint.getSourcePosition();
-        if (position == null) {
-            return;
-        }
+		breakpointsByFile.computeIfAbsent( filePath, k -> ConcurrentHashMap.newKeySet() ).add( breakpoint );
+		if ( configurationComplete ) {
+			pushBreakpoints( filePath );
+		}
+	}
 
-        VirtualFile file = position.getFile();
-        String filePath = file.getPath();
+	@Override
+	public void unregisterBreakpoint( @NotNull XLineBreakpoint<BoxLangBreakpointProperties> breakpoint, boolean temporary ) {
+		XSourcePosition position = breakpoint.getSourcePosition();
+		if ( position == null ) {
+			return;
+		}
 
-        Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
-        if (fileBreakpoints != null) {
-            fileBreakpoints.remove(breakpoint);
-            if (fileBreakpoints.isEmpty()) {
-                breakpointsByFile.remove(filePath);
-            }
-        }
+		VirtualFile											file			= position.getFile();
+		String												filePath		= file.getPath();
 
-        pushBreakpoints(filePath);
-    }
+		Set<XLineBreakpoint<BoxLangBreakpointProperties>>	fileBreakpoints	= breakpointsByFile.get( filePath );
+		if ( fileBreakpoints != null ) {
+			fileBreakpoints.remove( breakpoint );
+			if ( fileBreakpoints.isEmpty() ) {
+				breakpointsByFile.remove( filePath );
+			}
+		}
 
-    /**
-     * Builds a DAP SourceBreakpoint from an IntelliJ XLineBreakpoint.
-     * Reads condition, log expression from IntelliJ's built-in breakpoint UI fields
-     * (XBreakpoint.getConditionExpression() and XBreakpoint.getLogExpressionObject()),
-     * NOT from BoxLangBreakpointProperties which are never populated by the UI.
-     *
-     * @return The SourceBreakpoint, or null if the breakpoint is disabled or has no position.
-     */
-    @Nullable
-    private SourceBreakpoint buildSourceBreakpoint(@NotNull XLineBreakpoint<BoxLangBreakpointProperties> bp) {
-        if (!bp.isEnabled()) {
-            return null;
-        }
+		pushBreakpoints( filePath );
+	}
 
-        XSourcePosition pos = bp.getSourcePosition();
-        if (pos == null) {
-            return null;
-        }
+	/**
+	 * Builds a DAP SourceBreakpoint from an IntelliJ XLineBreakpoint.
+	 * Reads condition, log expression from IntelliJ's built-in breakpoint UI fields
+	 * (XBreakpoint.getConditionExpression() and XBreakpoint.getLogExpressionObject()),
+	 * NOT from BoxLangBreakpointProperties which are never populated by the UI.
+	 *
+	 * @return The SourceBreakpoint, or null if the breakpoint is disabled or has no position.
+	 */
+	@Nullable
+	private SourceBreakpoint buildSourceBreakpoint( @NotNull XLineBreakpoint<BoxLangBreakpointProperties> bp ) {
+		if ( !bp.isEnabled() ) {
+			return null;
+		}
 
-        SourceBreakpoint sourceBreakpoint = new SourceBreakpoint();
-        // DAP uses 1-based line numbers, IntelliJ uses 0-based
-        sourceBreakpoint.setLine(pos.getLine() + 1);
+		XSourcePosition pos = bp.getSourcePosition();
+		if ( pos == null ) {
+			return null;
+		}
 
-        // Read condition from IntelliJ's built-in breakpoint condition field.
-        // This is what the user edits via the breakpoint popup / "More" dialog.
-        XExpression conditionExpr = bp.getConditionExpression();
-        if (conditionExpr != null) {
-            String condition = conditionExpr.getExpression();
-            if (condition != null && !condition.isBlank()) {
-                sourceBreakpoint.setCondition(condition);
-            }
-        }
+		SourceBreakpoint sourceBreakpoint = new SourceBreakpoint();
+		// DAP uses 1-based line numbers, IntelliJ uses 0-based
+		sourceBreakpoint.setLine( pos.getLine() + 1 );
 
-        // Read log expression from IntelliJ's built-in "Evaluate and log" field.
-        // When the breakpoint's suspend policy is NONE, IntelliJ treats it as a
-        // "log breakpoint" (tracepoint) — the log expression is what gets logged.
-        XExpression logExpr = bp.getLogExpressionObject();
-        if (logExpr != null) {
-            String logExpression = logExpr.getExpression();
-            if (logExpression != null && !logExpression.isBlank()) {
-                sourceBreakpoint.setLogMessage(logExpression);
-            }
-        }
+		// Read condition from IntelliJ's built-in breakpoint condition field.
+		// This is what the user edits via the breakpoint popup / "More" dialog.
+		XExpression conditionExpr = bp.getConditionExpression();
+		if ( conditionExpr != null ) {
+			String condition = conditionExpr.getExpression();
+			if ( condition != null && !condition.isBlank() ) {
+				sourceBreakpoint.setCondition( condition );
+			}
+		}
 
-        return sourceBreakpoint;
-    }
+		// Read log expression from IntelliJ's built-in "Evaluate and log" field.
+		// When the breakpoint's suspend policy is NONE, IntelliJ treats it as a
+		// "log breakpoint" (tracepoint) — the log expression is what gets logged.
+		XExpression logExpr = bp.getLogExpressionObject();
+		if ( logExpr != null ) {
+			String logExpression = logExpr.getExpression();
+			if ( logExpression != null && !logExpression.isBlank() ) {
+				sourceBreakpoint.setLogMessage( logExpression );
+			}
+		}
 
-    /**
-     * Collects enabled DAP breakpoints for a file.
-     */
-    @NotNull
-    private List<SourceBreakpoint> collectDapBreakpoints(@Nullable Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints) {
-        List<SourceBreakpoint> dapBreakpoints = new ArrayList<>();
-        if (fileBreakpoints != null) {
-            for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
-                SourceBreakpoint sbp = buildSourceBreakpoint(bp);
-                if (sbp != null) {
-                    dapBreakpoints.add(sbp);
-                }
-            }
-        }
-        return dapBreakpoints;
-    }
+		return sourceBreakpoint;
+	}
 
-    /**
-     * Collects enabled DAP SourceBreakpoints for a given file path.
-     * Used by BoxLangDebugProcess for run-to-cursor to preserve existing breakpoints
-     * when adding a temporary one (since DAP setBreakpoints replaces all breakpoints for a file).
-     */
-    @NotNull
-    public List<SourceBreakpoint> collectDapBreakpointsForFile(@NotNull String filePath) {
-        return collectDapBreakpoints(breakpointsByFile.get(filePath));
-    }
+	/**
+	 * Collects enabled DAP breakpoints for a file.
+	 */
+	@NotNull
+	private List<SourceBreakpoint> collectDapBreakpoints( @Nullable Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints ) {
+		List<SourceBreakpoint> dapBreakpoints = new ArrayList<>();
+		if ( fileBreakpoints != null ) {
+			for ( XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints ) {
+				SourceBreakpoint sbp = buildSourceBreakpoint( bp );
+				if ( sbp != null ) {
+					dapBreakpoints.add( sbp );
+				}
+			}
+		}
+		return dapBreakpoints;
+	}
 
-    private CompletableFuture<Void> pushBreakpoints(@NotNull String filePath) {
-        BoxLangDapService dapService = debugProcess.getDapService();
-        if (!dapService.isConfigurationReady()) {
-            return CompletableFuture.completedFuture(null);
-        }
+	/**
+	 * Collects enabled DAP SourceBreakpoints for a given file path.
+	 * Used by BoxLangDebugProcess for run-to-cursor to preserve existing breakpoints
+	 * when adding a temporary one (since DAP setBreakpoints replaces all breakpoints for a file).
+	 */
+	@NotNull
+	public List<SourceBreakpoint> collectDapBreakpointsForFile( @NotNull String filePath ) {
+		return collectDapBreakpoints( breakpointsByFile.get( filePath ) );
+	}
 
-        List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints(breakpointsByFile.get(filePath));
-        LOG.debug("Syncing " + dapBreakpoints.size() + " breakpoints for " + filePath);
-        return dapService.setBreakpoints(filePath, dapBreakpoints)
-            .thenAccept(response -> handleSetBreakpointsResponse(filePath, response))
-            .exceptionally(ex -> {
-                LOG.warn("Failed to set breakpoints for " + filePath, ex);
-                return null;
-            });
-    }
+	private CompletableFuture<Void> pushBreakpoints( @NotNull String filePath ) {
+		BoxLangDapService dapService = debugProcess.getDapService();
+		if ( !dapService.isConfigurationReady() ) {
+			return CompletableFuture.completedFuture( null );
+		}
 
-    /**
-     * Handles the response from the DAP server after setting breakpoints.
-     * Updates breakpoint verification status.
-     */
-    private void handleSetBreakpointsResponse(@NotNull String filePath, SetBreakpointsResponse response) {
-        if (response == null || response.getBreakpoints() == null) {
-            LOG.warn("SetBreakpoints response was null for: " + filePath);
-            return;
-        }
+		List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints( breakpointsByFile.get( filePath ) );
+		LOG.debug( "Syncing " + dapBreakpoints.size() + " breakpoints for " + filePath );
+		return dapService.setBreakpoints( filePath, dapBreakpoints )
+		    .thenAccept( response -> handleSetBreakpointsResponse( filePath, response ) )
+		    .exceptionally( ex -> {
+			    LOG.warn( "Failed to set breakpoints for " + filePath, ex );
+			    return null;
+		    } );
+	}
 
-        org.eclipse.lsp4j.debug.Breakpoint[] verifiedBreakpoints = response.getBreakpoints();
-        Set<XLineBreakpoint<BoxLangBreakpointProperties>> fileBreakpoints = breakpointsByFile.get(filePath);
-        if (fileBreakpoints == null) {
-            return;
-        }
+	/**
+	 * Handles the response from the DAP server after setting breakpoints.
+	 * Updates breakpoint verification status.
+	 */
+	private void handleSetBreakpointsResponse( @NotNull String filePath, SetBreakpointsResponse response ) {
+		if ( response == null || response.getBreakpoints() == null ) {
+			LOG.warn( "SetBreakpoints response was null for: " + filePath );
+			return;
+		}
 
-        // Match verified breakpoints back to IntelliJ breakpoints by line number
-        for (org.eclipse.lsp4j.debug.Breakpoint verified : verifiedBreakpoints) {
-            if (verified.getLine() == null) {
-                continue;
-            }
+		org.eclipse.lsp4j.debug.Breakpoint[]				verifiedBreakpoints	= response.getBreakpoints();
+		Set<XLineBreakpoint<BoxLangBreakpointProperties>>	fileBreakpoints		= breakpointsByFile.get( filePath );
+		if ( fileBreakpoints == null ) {
+			return;
+		}
 
-            int verifiedLine = verified.getLine() - 1; // Convert back to 0-based
+		// Match verified breakpoints back to IntelliJ breakpoints by line number
+		for ( org.eclipse.lsp4j.debug.Breakpoint verified : verifiedBreakpoints ) {
+			if ( verified.getLine() == null ) {
+				continue;
+			}
 
-            for (XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints) {
-                XSourcePosition pos = bp.getSourcePosition();
-                if (pos != null && pos.getLine() == verifiedLine) {
-                    if (Boolean.TRUE.equals(verified.isVerified())) {
-                        debugProcess.getSession().setBreakpointVerified(bp);
-                    } else if (configurationComplete) {
-                        // Only mark as invalid AFTER configuration is complete.
-                        // Before launch, the VM doesn't exist yet so the server will report
-                        // verified=false for all breakpoints. That's expected — breakpoints
-                        // will be verified later when their classes load in the target VM.
-                        String message = verified.getMessage();
-                        if (message == null) {
-                            message = "Breakpoint could not be verified";
-                        }
-                        debugProcess.getSession().setBreakpointInvalid(bp, message);
-                    }
-                    break;
-                }
-            }
-        }
-    }
+			int verifiedLine = verified.getLine() - 1; // Convert back to 0-based
 
-    /**
-     * Re-sends all breakpoints to the server.
-     * Called after the debug session is fully initialized.
-     * @return A CompletableFuture that completes when all breakpoints have been synced.
-     */
-    public CompletableFuture<Void> syncAllBreakpoints() {
-        if (breakpointsByFile.isEmpty()) {
-            return CompletableFuture.completedFuture(null);
-        }
+			for ( XLineBreakpoint<BoxLangBreakpointProperties> bp : fileBreakpoints ) {
+				XSourcePosition pos = bp.getSourcePosition();
+				if ( pos != null && pos.getLine() == verifiedLine ) {
+					if ( Boolean.TRUE.equals( verified.isVerified() ) ) {
+						debugProcess.getSession().setBreakpointVerified( bp );
+					} else if ( configurationComplete ) {
+						// Only mark as invalid AFTER configuration is complete.
+						// Before launch, the VM doesn't exist yet so the server will report
+						// verified=false for all breakpoints. That's expected — breakpoints
+						// will be verified later when their classes load in the target VM.
+						String message = verified.getMessage();
+						if ( message == null ) {
+							message = "Breakpoint could not be verified";
+						}
+						debugProcess.getSession().setBreakpointInvalid( bp, message );
+					}
+					break;
+				}
+			}
+		}
+	}
 
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        for (String filePath : breakpointsByFile.keySet()) {
-            futures.add(pushBreakpoints(filePath));
-        }
+	/**
+	 * Re-sends all breakpoints to the server.
+	 * Called after the debug session is fully initialized.
+	 * 
+	 * @return A CompletableFuture that completes when all breakpoints have been synced.
+	 */
+	public CompletableFuture<Void> syncAllBreakpoints() {
+		if ( breakpointsByFile.isEmpty() ) {
+			return CompletableFuture.completedFuture( null );
+		}
 
-        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-    }
+		List<CompletableFuture<Void>> futures = new ArrayList<>();
+		for ( String filePath : breakpointsByFile.keySet() ) {
+			futures.add( pushBreakpoints( filePath ) );
+		}
 
-    /**
-     * Clears all tracked breakpoints.
-     */
-    public void clear() {
-        breakpointsByFile.clear();
-    }
+		return CompletableFuture.allOf( futures.toArray( new CompletableFuture[ 0 ] ) );
+	}
 
-    /**
-     * Marks configuration as complete. After this, breakpoints will be sent immediately
-     * when registered/unregistered instead of being deferred.
-     */
-    public void markConfigurationComplete() {
-        configurationComplete = true;
-    }
+	/**
+	 * Clears all tracked breakpoints.
+	 */
+	public void clear() {
+		breakpointsByFile.clear();
+	}
+
+	/**
+	 * Marks configuration as complete. After this, breakpoints will be sent immediately
+	 * when registered/unregistered instead of being deferred.
+	 */
+	public void markConfigurationComplete() {
+		configurationComplete = true;
+	}
 }

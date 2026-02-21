@@ -17,39 +17,39 @@ import org.jetbrains.annotations.Nullable;
  */
 public class BoxLangSuspendContext extends XSuspendContext {
 
-    private final int threadId;
-    private final BoxLangExecutionStack executionStack;
+	private final int					threadId;
+	private final BoxLangExecutionStack	executionStack;
 
-    /**
-     * Creates a suspend context with pre-fetched stack frames.
-     *
-     * @param debugProcess the debug process
-     * @param stoppedEvent the DAP stopped event arguments
-     * @param threadName display name for the stopped thread
-     * @param stackFrames the stack frames from the DAP stackTrace response
-     */
-    public BoxLangSuspendContext(@NotNull BoxLangDebugProcess debugProcess,
-                                  @NotNull StoppedEventArguments stoppedEvent,
-                                  @NotNull String threadName,
-                                  @NotNull StackFrame[] stackFrames) {
-        this.threadId = stoppedEvent.getThreadId() != null ? stoppedEvent.getThreadId() : 1;
-        this.executionStack = new BoxLangExecutionStack(debugProcess, threadId, threadName, stackFrames);
-    }
+	/**
+	 * Creates a suspend context with pre-fetched stack frames.
+	 *
+	 * @param debugProcess the debug process
+	 * @param stoppedEvent the DAP stopped event arguments
+	 * @param threadName   display name for the stopped thread
+	 * @param stackFrames  the stack frames from the DAP stackTrace response
+	 */
+	public BoxLangSuspendContext( @NotNull BoxLangDebugProcess debugProcess,
+	    @NotNull StoppedEventArguments stoppedEvent,
+	    @NotNull String threadName,
+	    @NotNull StackFrame[] stackFrames ) {
+		this.threadId		= stoppedEvent.getThreadId() != null ? stoppedEvent.getThreadId() : 1;
+		this.executionStack	= new BoxLangExecutionStack( debugProcess, threadId, threadName, stackFrames );
+	}
 
-    /**
-     * Returns the thread ID that caused the stop.
-     */
-    public int getThreadId() {
-        return threadId;
-    }
+	/**
+	 * Returns the thread ID that caused the stop.
+	 */
+	public int getThreadId() {
+		return threadId;
+	}
 
-    @Override
-    public @Nullable XExecutionStack getActiveExecutionStack() {
-        return executionStack;
-    }
+	@Override
+	public @Nullable XExecutionStack getActiveExecutionStack() {
+		return executionStack;
+	}
 
-    @Override
-    public XExecutionStack @NotNull [] getExecutionStacks() {
-        return new XExecutionStack[]{executionStack};
-    }
+	@Override
+	public XExecutionStack @NotNull [] getExecutionStacks() {
+		return new XExecutionStack[] { executionStack };
+	}
 }

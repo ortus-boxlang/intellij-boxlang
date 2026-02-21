@@ -14,30 +14,30 @@ import javax.swing.*;
  */
 public class BoxLangConfigurationType implements ConfigurationType {
 
-    public static final String ID = "BoxLangRunConfiguration";
+	public static final String ID = "BoxLangRunConfiguration";
 
-    @Override
-    public @NotNull @Nls(capitalization = Nls.Capitalization.Title) String getDisplayName() {
-        return "BoxLang";
-    }
+	@Override
+	public @NotNull @Nls( capitalization = Nls.Capitalization.Title ) String getDisplayName() {
+		return "BoxLang";
+	}
 
-    @Override
-    public @Nls(capitalization = Nls.Capitalization.Sentence) String getConfigurationTypeDescription() {
-        return "Run a BoxLang script";
-    }
+	@Override
+	public @Nls( capitalization = Nls.Capitalization.Sentence ) String getConfigurationTypeDescription() {
+		return "Run a BoxLang script";
+	}
 
-    @Override
-    public Icon getIcon() {
-        return BoxLangIcons.FILE;
-    }
+	@Override
+	public Icon getIcon() {
+		return BoxLangIcons.FILE;
+	}
 
-    @Override
-    public @NotNull @NonNls String getId() {
-        return ID;
-    }
+	@Override
+	public @NotNull @NonNls String getId() {
+		return ID;
+	}
 
-    @Override
-    public ConfigurationFactory[] getConfigurationFactories() {
-        return new ConfigurationFactory[]{new BoxLangConfigurationFactory(this)};
-    }
+	@Override
+	public ConfigurationFactory[] getConfigurationFactories() {
+		return new ConfigurationFactory[] { new BoxLangConfigurationFactory( this ) };
+	}
 }

@@ -29,114 +29,116 @@ import java.util.List;
  * Starts the DAP server and creates a debug session.
  */
 public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
-    private static final String RUNNER_ID = "BoxLangDebugRunner";
 
-    @Override
-    public @NotNull String getRunnerId() {
-        return RUNNER_ID;
-    }
+	private static final String RUNNER_ID = "BoxLangDebugRunner";
 
-    @Override
-    public boolean canRun(@NotNull String executorId, @NotNull RunProfile profile) {
-        return DefaultDebugExecutor.EXECUTOR_ID.equals(executorId)
-                && profile instanceof BoxLangRunConfiguration;
-    }
+	@Override
+	public @NotNull String getRunnerId() {
+		return RUNNER_ID;
+	}
 
-    @Override
-    protected @Nullable RunContentDescriptor doExecute(@NotNull RunProfileState state,
-                                                         @NotNull ExecutionEnvironment environment) throws ExecutionException {
-        if (!(state instanceof BoxLangRunProfileState)) {
-            throw new ExecutionException("Invalid run profile state");
-        }
+	@Override
+	public boolean canRun( @NotNull String executorId, @NotNull RunProfile profile ) {
+		return DefaultDebugExecutor.EXECUTOR_ID.equals( executorId )
+		    && profile instanceof BoxLangRunConfiguration;
+	}
 
-        BoxLangRunConfiguration configuration = (BoxLangRunConfiguration) environment.getRunProfile();
-        Project project = environment.getProject();
+	@Override
+	protected @Nullable RunContentDescriptor doExecute( @NotNull RunProfileState state,
+	    @NotNull ExecutionEnvironment environment ) throws ExecutionException {
+		if ( ! ( state instanceof BoxLangRunProfileState ) ) {
+			throw new ExecutionException( "Invalid run profile state" );
+		}
 
-        // Resolve the script path
-        String scriptPath = resolveScriptPath(configuration, project);
-        if (scriptPath == null || scriptPath.isBlank()) {
-            throw new ExecutionException("No BoxLang script to debug. Please open a BoxLang file or specify a script path.");
-        }
+		BoxLangRunConfiguration	configuration	= ( BoxLangRunConfiguration ) environment.getRunProfile();
+		Project					project			= environment.getProject();
 
-        // Get program arguments
-        String programArgsString = configuration.getProgramArguments();
-        List<String> programArgs = null;
-        if (programArgsString != null && !programArgsString.isBlank()) {
-            programArgs = ParametersListUtil.parse(programArgsString);
-        }
+		// Resolve the script path
+		String					scriptPath		= resolveScriptPath( configuration, project );
+		if ( scriptPath == null || scriptPath.isBlank() ) {
+			throw new ExecutionException( "No BoxLang script to debug. Please open a BoxLang file or specify a script path." );
+		}
 
-        // Get working directory
-        String workingDirectory = configuration.getWorkingDirectory();
-        if (workingDirectory == null || workingDirectory.isBlank()) {
-            workingDirectory = project.getBasePath();
-        }
+		// Get program arguments
+		String			programArgsString	= configuration.getProgramArguments();
+		List<String>	programArgs			= null;
+		if ( programArgsString != null && !programArgsString.isBlank() ) {
+			programArgs = ParametersListUtil.parse( programArgsString );
+		}
 
-        final String finalScriptPath = scriptPath;
-        final String finalWorkingDirectory = workingDirectory;
-        final List<String> finalProgramArgs = programArgs;
+		// Get working directory
+		String workingDirectory = configuration.getWorkingDirectory();
+		if ( workingDirectory == null || workingDirectory.isBlank() ) {
+			workingDirectory = project.getBasePath();
+		}
 
-        try {
-            XDebugSession debugSession = XDebuggerManager.getInstance(project).startSession(
-                    environment,
-                    new XDebugProcessStarter() {
-                        @Override
-                        public @NotNull XDebugProcess start(@NotNull XDebugSession session) throws ExecutionException {
-                            return createDebugProcess(
-                                    session,
-                                    environment,
-                                    finalScriptPath,
-                                    finalWorkingDirectory,
-                                    finalProgramArgs
-                            );
-                        }
-                    }
-            );
+		final String		finalScriptPath			= scriptPath;
+		final String		finalWorkingDirectory	= workingDirectory;
+		final List<String>	finalProgramArgs		= programArgs;
 
-            return debugSession.getRunContentDescriptor();
-        } catch (Exception e) {
-            throw new ExecutionException("Failed to start debug session: " + e.getMessage(), e);
-        }
-    }
+		try {
+			XDebugSession debugSession = XDebuggerManager.getInstance( project ).startSession(
+			    environment,
+			    new XDebugProcessStarter() {
 
-    private BoxLangDebugProcess createDebugProcess(@NotNull XDebugSession session,
-                                                    @NotNull ExecutionEnvironment environment,
-                                                    @NotNull String scriptPath,
-                                                    @Nullable String workingDirectory,
-                                                    @Nullable List<String> programArgs) throws ExecutionException {
-        Project project = environment.getProject();
+				    @Override
+				    public @NotNull XDebugProcess start( @NotNull XDebugSession session ) throws ExecutionException {
+					    return createDebugProcess(
+					        session,
+					        environment,
+					        finalScriptPath,
+					        finalWorkingDirectory,
+					        finalProgramArgs
+					    );
+				    }
+			    }
+			);
 
-        // Create DAP service for this debug session
-        BoxLangDapService dapService = new BoxLangDapService(project);
+			return debugSession.getRunContentDescriptor();
+		} catch ( Exception e ) {
+			throw new ExecutionException( "Failed to start debug session: " + e.getMessage(), e );
+		}
+	}
 
-        try {
-            dapService.start();
-            return new BoxLangDebugProcess(session, dapService, scriptPath, workingDirectory, programArgs);
+	private BoxLangDebugProcess createDebugProcess( @NotNull XDebugSession session,
+	    @NotNull ExecutionEnvironment environment,
+	    @NotNull String scriptPath,
+	    @Nullable String workingDirectory,
+	    @Nullable List<String> programArgs ) throws ExecutionException {
+		Project				project		= environment.getProject();
 
-        } catch (Exception e) {
-            dapService.dispose();
-            throw new ExecutionException("Failed to start DAP server: " + e.getMessage(), e);
-        }
-    }
+		// Create DAP service for this debug session
+		BoxLangDapService	dapService	= new BoxLangDapService( project );
 
-    private String resolveScriptPath(BoxLangRunConfiguration configuration, Project project) {
-        // If not using current file, return the configured script path
-        if (!configuration.isUseCurrentFile()) {
-            return configuration.getScriptPath();
-        }
+		try {
+			dapService.start();
+			return new BoxLangDebugProcess( session, dapService, scriptPath, workingDirectory, programArgs );
 
-        // Get the currently open file in the editor
-        VirtualFile[] selectedFiles = FileEditorManager.getInstance(project).getSelectedFiles();
-        if (selectedFiles.length == 0) {
-            return null;
-        }
+		} catch ( Exception e ) {
+			dapService.dispose();
+			throw new ExecutionException( "Failed to start DAP server: " + e.getMessage(), e );
+		}
+	}
 
-        VirtualFile currentFile = selectedFiles[0];
+	private String resolveScriptPath( BoxLangRunConfiguration configuration, Project project ) {
+		// If not using current file, return the configured script path
+		if ( !configuration.isUseCurrentFile() ) {
+			return configuration.getScriptPath();
+		}
 
-        // Verify it's a BoxLang file
-        if (!BoxLangFileUtil.isBoxLangFile(currentFile)) {
-            return null;
-        }
+		// Get the currently open file in the editor
+		VirtualFile[] selectedFiles = FileEditorManager.getInstance( project ).getSelectedFiles();
+		if ( selectedFiles.length == 0 ) {
+			return null;
+		}
 
-        return currentFile.getPath();
-    }
+		VirtualFile currentFile = selectedFiles[ 0 ];
+
+		// Verify it's a BoxLang file
+		if ( !BoxLangFileUtil.isBoxLangFile( currentFile ) ) {
+			return null;
+		}
+
+		return currentFile.getPath();
+	}
 }

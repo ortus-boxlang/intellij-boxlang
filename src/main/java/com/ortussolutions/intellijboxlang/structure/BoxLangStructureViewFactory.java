@@ -7,8 +7,9 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangStructureViewFactory implements PsiStructureViewFactory {
-    @Override
-    public @Nullable StructureViewBuilder getStructureViewBuilder(@NotNull PsiFile psiFile) {
-        return new BoxLangStructureViewBuilder(psiFile);
-    }
+
+	@Override
+	public @Nullable StructureViewBuilder getStructureViewBuilder( @NotNull PsiFile psiFile ) {
+		return new BoxLangStructureViewBuilder( psiFile );
+	}
 }

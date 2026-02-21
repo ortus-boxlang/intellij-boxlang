@@ -20,92 +20,92 @@ import javax.swing.*;
  */
 public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConfiguration> {
 
-    private final JPanel panel;
-    private final JBCheckBox useCurrentFileCheckbox;
-    private final TextFieldWithBrowseButton scriptPathField;
-    private final JBLabel scriptPathLabel;
-    private final TextFieldWithBrowseButton workingDirectoryField;
-    private final RawCommandLineEditor programArgumentsField;
-    private final RawCommandLineEditor environmentVariablesField;
-    private final TextFieldWithBrowseButton boxLangHomeField;
-    private final RawCommandLineEditor jvmArgsField;
+	private final JPanel					panel;
+	private final JBCheckBox				useCurrentFileCheckbox;
+	private final TextFieldWithBrowseButton	scriptPathField;
+	private final JBLabel					scriptPathLabel;
+	private final TextFieldWithBrowseButton	workingDirectoryField;
+	private final RawCommandLineEditor		programArgumentsField;
+	private final RawCommandLineEditor		environmentVariablesField;
+	private final TextFieldWithBrowseButton	boxLangHomeField;
+	private final RawCommandLineEditor		jvmArgsField;
 
-    public BoxLangRunConfigurationEditor(Project project) {
-        useCurrentFileCheckbox = new JBCheckBox("Use current file");
-        useCurrentFileCheckbox.addActionListener(e -> updateScriptPathVisibility());
-        
-        scriptPathLabel = new JBLabel("Script path:");
-        scriptPathField = new TextFieldWithBrowseButton();
-        FileChooserDescriptor scriptDescriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
-                .withFileFilter(BoxLangFileUtil::isBoxLangFile)
-                .withTitle("Select BoxLang Script")
-                .withDescription("Select the BoxLang script file to run");
-        scriptPathField.addBrowseFolderListener(new TextBrowseFolderListener(scriptDescriptor, project));
+	public BoxLangRunConfigurationEditor( Project project ) {
+		useCurrentFileCheckbox = new JBCheckBox( "Use current file" );
+		useCurrentFileCheckbox.addActionListener( e -> updateScriptPathVisibility() );
 
-        workingDirectoryField = new TextFieldWithBrowseButton();
-        FileChooserDescriptor workingDirDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
-                .withTitle("Select Working Directory")
-                .withDescription("Select the working directory for the script");
-        workingDirectoryField.addBrowseFolderListener(new TextBrowseFolderListener(workingDirDescriptor, project));
+		scriptPathLabel	= new JBLabel( "Script path:" );
+		scriptPathField	= new TextFieldWithBrowseButton();
+		FileChooserDescriptor scriptDescriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
+		    .withFileFilter( BoxLangFileUtil::isBoxLangFile )
+		    .withTitle( "Select BoxLang Script" )
+		    .withDescription( "Select the BoxLang script file to run" );
+		scriptPathField.addBrowseFolderListener( new TextBrowseFolderListener( scriptDescriptor, project ) );
 
-        programArgumentsField = new RawCommandLineEditor();
-        programArgumentsField.setDialogCaption("Program Arguments");
+		workingDirectoryField = new TextFieldWithBrowseButton();
+		FileChooserDescriptor workingDirDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
+		    .withTitle( "Select Working Directory" )
+		    .withDescription( "Select the working directory for the script" );
+		workingDirectoryField.addBrowseFolderListener( new TextBrowseFolderListener( workingDirDescriptor, project ) );
 
-        environmentVariablesField = new RawCommandLineEditor();
-        environmentVariablesField.setDialogCaption("Environment Variables");
+		programArgumentsField = new RawCommandLineEditor();
+		programArgumentsField.setDialogCaption( "Program Arguments" );
 
-        boxLangHomeField = new TextFieldWithBrowseButton();
-        FileChooserDescriptor boxLangHomeDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
-                .withTitle("Select BoxLang Home")
-                .withDescription("Select the BoxLang home directory (leave empty to use default)");
-        boxLangHomeField.addBrowseFolderListener(new TextBrowseFolderListener(boxLangHomeDescriptor, project));
+		environmentVariablesField = new RawCommandLineEditor();
+		environmentVariablesField.setDialogCaption( "Environment Variables" );
 
-        jvmArgsField = new RawCommandLineEditor();
-        jvmArgsField.setDialogCaption("JVM Arguments");
+		boxLangHomeField = new TextFieldWithBrowseButton();
+		FileChooserDescriptor boxLangHomeDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
+		    .withTitle( "Select BoxLang Home" )
+		    .withDescription( "Select the BoxLang home directory (leave empty to use default)" );
+		boxLangHomeField.addBrowseFolderListener( new TextBrowseFolderListener( boxLangHomeDescriptor, project ) );
 
-        panel = FormBuilder.createFormBuilder()
-                .addComponent(useCurrentFileCheckbox)
-                .addLabeledComponent(scriptPathLabel, scriptPathField, 1, false)
-                .addLabeledComponent(new JBLabel("Working directory:"), workingDirectoryField, 1, false)
-                .addLabeledComponent(new JBLabel("Program arguments:"), programArgumentsField, 1, false)
-                .addLabeledComponent(new JBLabel("Environment variables:"), environmentVariablesField, 1, false)
-                .addLabeledComponent(new JBLabel("BoxLang home:"), boxLangHomeField, 1, false)
-                .addLabeledComponent(new JBLabel("JVM arguments:"), jvmArgsField, 1, false)
-                .addComponentFillVertically(new JPanel(), 0)
-                .getPanel();
-    }
+		jvmArgsField = new RawCommandLineEditor();
+		jvmArgsField.setDialogCaption( "JVM Arguments" );
 
-    private void updateScriptPathVisibility() {
-        boolean useCurrentFile = useCurrentFileCheckbox.isSelected();
-        scriptPathLabel.setVisible(!useCurrentFile);
-        scriptPathField.setVisible(!useCurrentFile);
-    }
+		panel = FormBuilder.createFormBuilder()
+		    .addComponent( useCurrentFileCheckbox )
+		    .addLabeledComponent( scriptPathLabel, scriptPathField, 1, false )
+		    .addLabeledComponent( new JBLabel( "Working directory:" ), workingDirectoryField, 1, false )
+		    .addLabeledComponent( new JBLabel( "Program arguments:" ), programArgumentsField, 1, false )
+		    .addLabeledComponent( new JBLabel( "Environment variables:" ), environmentVariablesField, 1, false )
+		    .addLabeledComponent( new JBLabel( "BoxLang home:" ), boxLangHomeField, 1, false )
+		    .addLabeledComponent( new JBLabel( "JVM arguments:" ), jvmArgsField, 1, false )
+		    .addComponentFillVertically( new JPanel(), 0 )
+		    .getPanel();
+	}
 
-    @Override
-    protected void resetEditorFrom(@NotNull BoxLangRunConfiguration configuration) {
-        useCurrentFileCheckbox.setSelected(configuration.isUseCurrentFile());
-        scriptPathField.setText(configuration.getScriptPath() != null ? configuration.getScriptPath() : "");
-        workingDirectoryField.setText(configuration.getWorkingDirectory() != null ? configuration.getWorkingDirectory() : "");
-        programArgumentsField.setText(configuration.getProgramArguments() != null ? configuration.getProgramArguments() : "");
-        environmentVariablesField.setText(configuration.getEnvironmentVariables() != null ? configuration.getEnvironmentVariables() : "");
-        boxLangHomeField.setText(configuration.getBoxLangHome() != null ? configuration.getBoxLangHome() : "");
-        jvmArgsField.setText(configuration.getJvmArgs() != null ? configuration.getJvmArgs() : "");
-        updateScriptPathVisibility();
-    }
+	private void updateScriptPathVisibility() {
+		boolean useCurrentFile = useCurrentFileCheckbox.isSelected();
+		scriptPathLabel.setVisible( !useCurrentFile );
+		scriptPathField.setVisible( !useCurrentFile );
+	}
 
-    @Override
-    protected void applyEditorTo(@NotNull BoxLangRunConfiguration configuration) {
-        configuration.setUseCurrentFile(useCurrentFileCheckbox.isSelected());
-        configuration.setScriptPath(scriptPathField.getText());
-        configuration.setWorkingDirectory(workingDirectoryField.getText());
-        configuration.setProgramArguments(programArgumentsField.getText());
-        configuration.setEnvironmentVariables(environmentVariablesField.getText());
-        configuration.setBoxLangHome(boxLangHomeField.getText());
-        configuration.setJvmArgs(jvmArgsField.getText());
-    }
+	@Override
+	protected void resetEditorFrom( @NotNull BoxLangRunConfiguration configuration ) {
+		useCurrentFileCheckbox.setSelected( configuration.isUseCurrentFile() );
+		scriptPathField.setText( configuration.getScriptPath() != null ? configuration.getScriptPath() : "" );
+		workingDirectoryField.setText( configuration.getWorkingDirectory() != null ? configuration.getWorkingDirectory() : "" );
+		programArgumentsField.setText( configuration.getProgramArguments() != null ? configuration.getProgramArguments() : "" );
+		environmentVariablesField.setText( configuration.getEnvironmentVariables() != null ? configuration.getEnvironmentVariables() : "" );
+		boxLangHomeField.setText( configuration.getBoxLangHome() != null ? configuration.getBoxLangHome() : "" );
+		jvmArgsField.setText( configuration.getJvmArgs() != null ? configuration.getJvmArgs() : "" );
+		updateScriptPathVisibility();
+	}
 
-    @Override
-    protected @NotNull JComponent createEditor() {
-        return panel;
-    }
+	@Override
+	protected void applyEditorTo( @NotNull BoxLangRunConfiguration configuration ) {
+		configuration.setUseCurrentFile( useCurrentFileCheckbox.isSelected() );
+		configuration.setScriptPath( scriptPathField.getText() );
+		configuration.setWorkingDirectory( workingDirectoryField.getText() );
+		configuration.setProgramArguments( programArgumentsField.getText() );
+		configuration.setEnvironmentVariables( environmentVariablesField.getText() );
+		configuration.setBoxLangHome( boxLangHomeField.getText() );
+		configuration.setJvmArgs( jvmArgsField.getText() );
+	}
+
+	@Override
+	protected @NotNull JComponent createEditor() {
+		return panel;
+	}
 }

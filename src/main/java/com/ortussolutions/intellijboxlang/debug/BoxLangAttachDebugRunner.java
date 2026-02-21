@@ -23,62 +23,64 @@ import org.jetbrains.annotations.Nullable;
  * to connect to an already-running BoxLang process via JDWP.
  */
 public class BoxLangAttachDebugRunner extends GenericProgramRunner<RunnerSettings> {
-    private static final String RUNNER_ID = "BoxLangAttachDebugRunner";
 
-    @Override
-    public @NotNull String getRunnerId() {
-        return RUNNER_ID;
-    }
+	private static final String RUNNER_ID = "BoxLangAttachDebugRunner";
 
-    @Override
-    public boolean canRun(@NotNull String executorId, @NotNull RunProfile profile) {
-        return DefaultDebugExecutor.EXECUTOR_ID.equals(executorId)
-                && profile instanceof BoxLangAttachRunConfiguration;
-    }
+	@Override
+	public @NotNull String getRunnerId() {
+		return RUNNER_ID;
+	}
 
-    @Override
-    protected @Nullable RunContentDescriptor doExecute(@NotNull RunProfileState state,
-                                                         @NotNull ExecutionEnvironment environment) throws ExecutionException {
-        BoxLangAttachRunConfiguration configuration = (BoxLangAttachRunConfiguration) environment.getRunProfile();
-        Project project = environment.getProject();
+	@Override
+	public boolean canRun( @NotNull String executorId, @NotNull RunProfile profile ) {
+		return DefaultDebugExecutor.EXECUTOR_ID.equals( executorId )
+		    && profile instanceof BoxLangAttachRunConfiguration;
+	}
 
-        String host = configuration.getHost();
-        int jdwpPort = configuration.getJdwpPort();
-        String localRoot = configuration.getLocalRoot();
-        String remoteRoot = configuration.getRemoteRoot();
+	@Override
+	protected @Nullable RunContentDescriptor doExecute( @NotNull RunProfileState state,
+	    @NotNull ExecutionEnvironment environment ) throws ExecutionException {
+		BoxLangAttachRunConfiguration	configuration	= ( BoxLangAttachRunConfiguration ) environment.getRunProfile();
+		Project							project			= environment.getProject();
 
-        try {
-            XDebugSession debugSession = XDebuggerManager.getInstance(project).startSession(
-                    environment,
-                    new XDebugProcessStarter() {
-                        @Override
-                        public @NotNull XDebugProcess start(@NotNull XDebugSession session) throws ExecutionException {
-                            return createAttachDebugProcess(session, project, host, jdwpPort, localRoot, remoteRoot);
-                        }
-                    }
-            );
+		String							host			= configuration.getHost();
+		int								jdwpPort		= configuration.getJdwpPort();
+		String							localRoot		= configuration.getLocalRoot();
+		String							remoteRoot		= configuration.getRemoteRoot();
 
-            return debugSession.getRunContentDescriptor();
-        } catch (Exception e) {
-            throw new ExecutionException("Failed to start attach debug session: " + e.getMessage(), e);
-        }
-    }
+		try {
+			XDebugSession debugSession = XDebuggerManager.getInstance( project ).startSession(
+			    environment,
+			    new XDebugProcessStarter() {
 
-    private BoxLangDebugProcess createAttachDebugProcess(@NotNull XDebugSession session,
-                                                          @NotNull Project project,
-                                                          @Nullable String host,
-                                                          int jdwpPort,
-                                                          @Nullable String localRoot,
-                                                          @Nullable String remoteRoot) throws ExecutionException {
-        BoxLangDapService dapService = new BoxLangDapService(project);
+				    @Override
+				    public @NotNull XDebugProcess start( @NotNull XDebugSession session ) throws ExecutionException {
+					    return createAttachDebugProcess( session, project, host, jdwpPort, localRoot, remoteRoot );
+				    }
+			    }
+			);
 
-        try {
-            dapService.start();
-            return BoxLangDebugProcess.createAttachProcess(session, dapService, host, jdwpPort, localRoot, remoteRoot);
+			return debugSession.getRunContentDescriptor();
+		} catch ( Exception e ) {
+			throw new ExecutionException( "Failed to start attach debug session: " + e.getMessage(), e );
+		}
+	}
 
-        } catch (Exception e) {
-            dapService.dispose();
-            throw new ExecutionException("Failed to start DAP server for attach: " + e.getMessage(), e);
-        }
-    }
+	private BoxLangDebugProcess createAttachDebugProcess( @NotNull XDebugSession session,
+	    @NotNull Project project,
+	    @Nullable String host,
+	    int jdwpPort,
+	    @Nullable String localRoot,
+	    @Nullable String remoteRoot ) throws ExecutionException {
+		BoxLangDapService dapService = new BoxLangDapService( project );
+
+		try {
+			dapService.start();
+			return BoxLangDebugProcess.createAttachProcess( session, dapService, host, jdwpPort, localRoot, remoteRoot );
+
+		} catch ( Exception e ) {
+			dapService.dispose();
+			throw new ExecutionException( "Failed to start DAP server for attach: " + e.getMessage(), e );
+		}
+	}
 }
