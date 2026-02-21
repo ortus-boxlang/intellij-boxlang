@@ -46,7 +46,7 @@ intellijPlatform {
   signing {
     certificateChain.set(providers.environmentVariable("CERTIFICATE_CHAIN"))
     privateKey.set(providers.environmentVariable("PRIVATE_KEY"))
-    password.set(providers.environmentVariable("PRIVATE_KEY_PASSWORD"))
+    password.set(providers.environmentVariable("PRIVATE_KEY_PASSWORD").orElse(""))
   }
 
   publishing {
