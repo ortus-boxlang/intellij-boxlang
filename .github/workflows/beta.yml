@@ -1,0 +1,79 @@
+name: Beta Release
+
+on:
+  push:
+    branches:
+      - development
+    paths-ignore:
+      - '**.md'
+      - '.github/changelog-config.json'
+
+concurrency:
+  group: beta-release
+  cancel-in-progress: true
+
+jobs:
+  beta:
+    name: Build and Publish Beta
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+
+      - name: Generate beta version
+        id: version
+        run: |
+          # Get base version from build.gradle.kts
+          BASE_VERSION=$(grep 'version = ' build.gradle.kts | head -1 | sed 's/.*version = "\(.*\)"/\1/')
+          # Generate timestamp-based beta version
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          SHORT_SHA=${GITHUB_SHA::7}
+          BETA_VERSION="${BASE_VERSION}-beta.${TIMESTAMP}"
+          echo "VERSION=${BETA_VERSION}" >> $GITHUB_OUTPUT
+          echo "Beta version: ${BETA_VERSION}"
+
+      - name: Update version in build.gradle.kts
+        run: |
+          sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.VERSION }}\"/" build.gradle.kts
+
+      - name: Build plugin
+        run: ./gradlew buildPlugin
+
+      - name: Run tests
+        run: ./gradlew test
+
+      - name: Sign plugin
+        run: ./gradlew signPlugin
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+
+      - name: Publish to JetBrains Marketplace (Beta Channel)
+        run: ./gradlew publishPlugin -PpluginChannel=beta
+        env:
+          PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+
+      - name: Upload beta artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: beta-plugin-${{ steps.version.outputs.VERSION }}
+          path: build/distributions/*.zip
+          retention-days: 30
