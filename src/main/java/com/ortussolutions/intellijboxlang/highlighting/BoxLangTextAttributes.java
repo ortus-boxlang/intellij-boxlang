@@ -22,6 +22,10 @@ public final class BoxLangTextAttributes {
 	    "BOXLANG_STRING",
 	    DefaultLanguageHighlighterColors.STRING
 	);
+	public static final TextAttributesKey	HASH_SIGN		= TextAttributesKey.createTextAttributesKey(
+	    "BOXLANG_HASH_SIGN",
+	    DefaultLanguageHighlighterColors.KEYWORD
+	);
 	public static final TextAttributesKey	LINE_COMMENT	= TextAttributesKey.createTextAttributesKey(
 	    "BOXLANG_LINE_COMMENT",
 	    DefaultLanguageHighlighterColors.LINE_COMMENT

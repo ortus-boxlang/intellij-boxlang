@@ -12,7 +12,36 @@
 
   <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
        Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
-  <description>BoxLang IDE Plugin for IntelliJ IDEA providing Syntax Highlighting and LSP integration</description>
+  <description><![CDATA[
+    <p>The official IntelliJ IDEA plugin for <a href="https://boxlang.io">BoxLang</a>, a modern dynamic JVM language by Ortus Solutions.</p>
+
+    <h2>Features</h2>
+    <ul>
+      <li><strong>Syntax Highlighting</strong> - Full lexer-based highlighting for .bx, .bxm, and .bxs files with customizable color schemes</li>
+      <li><strong>LSP Integration</strong> - Semantic tokens, real-time diagnostics, and document symbols via Language Server Protocol</li>
+      <li><strong>Run Configurations</strong> - Execute BoxLang scripts directly with configurable arguments and environment</li>
+      <li><strong>Debugger</strong> - Full debugging support with breakpoints, stepping, variable inspection, watch expressions, and expression evaluation</li>
+      <li><strong>Structure View</strong> - Navigate code structure with document outline</li>
+      <li><strong>File Templates</strong> - Create new BoxLang Class, Script, and Template files</li>
+      <li><strong>Runtime Management</strong> - Automatic BoxLang runtime download and configuration</li>
+    </ul>
+
+    <h2>Requirements</h2>
+    <ul>
+      <li>Java 21 or later</li>
+      <li>IntelliJ IDEA 2024.2 or later</li>
+    </ul>
+
+    <h2>Getting Started</h2>
+    <ol>
+      <li>Install the plugin and restart the IDE</li>
+      <li>Open or create a BoxLang project</li>
+      <li>Configure BoxLang settings in <strong>Settings → Languages &amp; Frameworks → BoxLang</strong></li>
+      <li>Create new files via <strong>New → BoxLang File</strong></li>
+    </ol>
+
+    <p>For documentation and support, visit <a href="https://boxlang.io">boxlang.io</a></p>
+  ]]></description>
 
   <!-- Product and plugin compatibility requirements.
        Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->

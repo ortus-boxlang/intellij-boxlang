@@ -1,10 +1,21 @@
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M32.0845 7.94025V4H24.0203V7.9896H16.029V4H7.91553V7.94025H4V36H16.0044V32.0045C16.0058 30.9457 16.4274 29.9308 17.1766 29.1826C17.9258 28.4345 18.9412 28.0143 20 28.0143C21.0588 28.0143 22.0743 28.4345 22.8234 29.1826C23.5726 29.9308 23.9942 30.9457 23.9956 32.0045V36H36V7.94025H32.0845Z" fill="url(#paint0_linear)"/>
-    <defs>
-        <linearGradient id="paint0_linear" x1="2.94192" y1="4.89955" x2="37.7772" y2="39.7345" gradientUnits="userSpaceOnUse">
-            <stop offset="0.15937" stop-color="#3BEA62"/>
-            <stop offset="0.5404" stop-color="#3C99CC"/>
-            <stop offset="0.93739" stop-color="#6B57FF"/>
-        </linearGradient>
-    </defs>
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+  <defs>
+    <linearGradient id="boxlang-gradient" x1="21.39" y1="77.59" x2="78.67" y2="29.52" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00dbff"/>
+      <stop offset="1" stop-color="#00ff75"/>
+    </linearGradient>
+    <linearGradient id="boxlang-gradient-2" x1="1.45" y1="99.56" x2="10.97" y2="91.58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00dbff"/>
+      <stop offset="1" stop-color="#00ff75"/>
+    </linearGradient>
+    <linearGradient id="boxlang-gradient-3" x1="10.92" y1="105.24" x2="102.26" y2="28.6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00dbff"/>
+      <stop offset="1" stop-color="#00ff75"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2, 1) scale(0.33)">
+    <path fill="url(#boxlang-gradient)" d="M37.96,18.29l10.66-8.95h.01s.02,0,.02,0c.38.06.75.12,1.13.19,22.89,4.56,37.72,26.84,33.15,49.7-4.52,22.67-26.4,37.42-49.02,33.27,4.88-1.11,9.57-3.35,13.67-6.78,13.73-11.52,15.53-32,4-45.74-6.61-7.87-16.15-11.81-25.68-11.58l12.06-10.12Z"/>
+    <path fill="url(#boxlang-gradient-2)" d="M1.45,99.56c-2.21-2.63-1.86-6.55.77-8.75,2.63-2.21,6.55-1.86,8.75.77,2.21,2.63,1.86,6.55-.77,8.75-2.63,2.21-6.55,1.86-8.75-.77Z"/>
+    <path fill="url(#boxlang-gradient-3)" d="M61.42,117.85c-19.21,3.86-38.12-1.94-51.7-14.04.79-.34,1.55-.79,2.25-1.38,1.42-1.19,2.38-2.74,2.85-4.4,2.97,1.71,6.12,3.16,9.43,4.3,28.27,9.72,59.04-5.34,68.73-33.6C102.7,40.46,87.64,9.69,59.38,0c24.61,4.05,44.13,22.9,48.99,47.31,6.52,32.45-14.5,64.02-46.95,70.54Z"/>
+  </g>
 </svg>
