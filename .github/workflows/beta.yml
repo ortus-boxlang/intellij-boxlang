@@ -42,10 +42,8 @@ jobs:
         run: |
           # Get base version from build.gradle.kts
           BASE_VERSION=$(grep 'version = ' build.gradle.kts | head -1 | sed 's/.*version = "\(.*\)"/\1/')
-          # Generate timestamp-based beta version
-          TIMESTAMP=$(date +%Y%m%d%H%M%S)
-          SHORT_SHA=${GITHUB_SHA::7}
-          BETA_VERSION="${BASE_VERSION}-beta.${TIMESTAMP}"
+          # Use GitHub run number as incrementing build ID
+          BETA_VERSION="${BASE_VERSION}-beta.${GITHUB_RUN_NUMBER}"
           echo "VERSION=${BETA_VERSION}" >> $GITHUB_OUTPUT
           echo "Beta version: ${BETA_VERSION}"
 
