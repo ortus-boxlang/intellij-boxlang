@@ -99,6 +99,9 @@
     <!-- Module Type for IntelliJ IDEA New Project wizard -->
     <moduleType id="BOXLANG_MODULE" implementationClass="com.ortussolutions.intellijboxlang.project.BoxLangModuleType"/>
 
+    <!-- Notifications -->
+    <notificationGroup id="BoxLang" displayType="BALLOON" />
+
   </extensions>
 
   <actions>
