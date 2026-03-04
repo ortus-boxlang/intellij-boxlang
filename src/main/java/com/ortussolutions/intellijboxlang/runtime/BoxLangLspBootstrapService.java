@@ -7,6 +7,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.NlsContexts;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
 import com.ortussolutions.intellijboxlang.settings.BoxLangSettingsResolver;
+import com.ortussolutions.intellijboxlang.settings.BoxLangStoragePaths;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,37 +60,61 @@ public final class BoxLangLspBootstrapService {
 	}
 
 	private static LspModuleInfo resolveLspModule( Project project, BoxLangResolvedSettings settings ) throws IOException {
-		LspModuleInfo info = LspModuleResolver.resolve( settings );
-		if ( settings.lspVersion == null || settings.lspVersion.isBlank() ) {
-			throw new IOException( "LSP version is not configured." );
-		}
-		if ( !info.needsDownload ) {
-			return info;
+		// 0. If a module path override is configured, use it directly
+		if ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() ) {
+			Path overridePath = Path.of( settings.lspModulePath );
+			if ( Files.exists( overridePath ) ) {
+				LspModuleInfo info = new LspModuleInfo();
+				// lspModulePath points to the folder containing bx-lsp/
+				info.modulePath		= overridePath.resolve( "bx-lsp" );
+				info.boxJsonPath	= LspModuleResolver.findBoxJson( info.modulePath );
+				info.needsDownload	= info.boxJsonPath == null;
+				if ( !info.needsDownload ) {
+					return info;
+				}
+			}
 		}
 
-		if ( settings.promptForDownloads && !hasPrompted( LSP_PROMPTED, project ) ) {
-			if ( !BoxLangPromptService.confirmDownload( project,
-			    "Download BoxLang LSP",
-			    "BoxLang LSP module (" + settings.lspVersion + ") is not installed. Download now?" ) ) {
-				throw new IOException( "BoxLang LSP module download was declined." );
+		String lspVersion = settings.lspVersion;
+
+		// 1. If a specific version is configured, check if it's installed
+		if ( lspVersion != null && !lspVersion.isBlank() ) {
+			LspModuleInfo info = LspModuleResolver.resolveForVersion( lspVersion );
+			if ( !info.needsDownload ) {
+				return info;
 			}
+		}
+
+		// 2. No specific version configured (or not installed) - try any installed version
+		if ( lspVersion == null || lspVersion.isBlank() ) {
+			LspModuleInfo anyInstalled = LspModuleResolver.findAnyInstalledVersion();
+			if ( anyInstalled != null && !anyInstalled.needsDownload ) {
+				LOG.info( "Using installed LSP version: " + anyInstalled.requestedVersion );
+				return anyInstalled;
+			}
+		}
+
+		// 3. Nothing usable installed - show notification only if no explicit version is configured
+		// (if the user has a version set but it's not installed, that's a misconfiguration - don't auto-prompt)
+		boolean hasExplicitConfig = ( lspVersion != null && !lspVersion.isBlank() )
+		    || ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() );
+		if ( !hasExplicitConfig && !hasPrompted( LSP_PROMPTED, project ) ) {
 			LSP_PROMPTED.put( project, true );
+			BoxLangPromptService.promptAndDownload(
+			    project,
+			    "Download BoxLang LSP",
+			    "BoxLang LSP module is not installed. Would you like to download it?",
+			    "BoxLang LSP",
+			    ForgeBoxVersionFetcher::fetchLspVersions,
+			    ( version, indicator ) -> {
+				    Path targetDir = BoxLangStoragePaths.getUserBoxLangHome()
+				        .resolve( "modules" )
+				        .resolve( "bx-lsp" );
+				    ForgeBoxLspInstaller.install( version, targetDir, indicator );
+			    } );
 		}
 
-		ProgressManager.getInstance().run( new DownloadTask( project, "Downloading BoxLang LSP module" ) {
-
-			@Override
-			protected void runTask( @NotNull ProgressIndicator indicator ) throws IOException {
-				LOG.info( "Downloading bx-lsp " + settings.lspVersion + " to " + info.modulePath );
-				ForgeBoxLspInstaller.install( settings.lspVersion, info.modulePath, indicator );
-			}
-		} );
-
-		LspModuleInfo refreshed = LspModuleResolver.resolve( settings );
-		if ( refreshed.needsDownload ) {
-			throw new IOException( "BoxLang LSP module installation failed." );
-		}
-		return refreshed;
+		throw new IOException( "BoxLang LSP module is not installed." );
 	}
 
 	private static Object getProjectLock( Project project ) {
@@ -109,7 +134,7 @@ public final class BoxLangLspBootstrapService {
 			return selection;
 		}
 
-		if ( settings.promptForDownloads && !hasPrompted( RUNTIME_PROMPTED, project ) ) {
+		if ( !hasPrompted( RUNTIME_PROMPTED, project ) ) {
 			if ( !BoxLangPromptService.confirmDownload( project,
 			    "Download BoxLang Runtime",
 			    "BoxLang runtime ^" + runtimeInfo.requestedVersion + " is required for the LSP. Download now?" ) ) {

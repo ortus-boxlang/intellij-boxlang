@@ -16,8 +16,8 @@ public final class BoxLangApplicationSettings implements PersistentStateComponen
 	private final BoxLangSettingsState state = new BoxLangSettingsState();
 
 	public BoxLangApplicationSettings() {
-		state.boxLangVersion	= "1.9.0";
-		state.lspVersion		= "bx-lsp@1.5.0+6";
+		state.boxLangVersion = "1.9.0";
+		// lspVersion intentionally left null - will use any installed version or prompt user
 	}
 
 	public static BoxLangApplicationSettings getInstance() {

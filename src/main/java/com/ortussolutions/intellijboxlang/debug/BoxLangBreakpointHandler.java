@@ -160,9 +160,14 @@ public class BoxLangBreakpointHandler extends XBreakpointHandler<XLineBreakpoint
 			return CompletableFuture.completedFuture( null );
 		}
 
-		List<SourceBreakpoint> dapBreakpoints = collectDapBreakpoints( breakpointsByFile.get( filePath ) );
-		LOG.debug( "Syncing " + dapBreakpoints.size() + " breakpoints for " + filePath );
-		return dapService.setBreakpoints( filePath, dapBreakpoints )
+		// Use the same path transformation as launch() so the DAP server receives
+		// a consistent path for both the breakpoint source and the launched program.
+		// This matters when the original path contains whitespace and gets aliased
+		// via a symlink to a whitespace-free location (e.g. /tmp/intellij-boxlang-debug/...).
+		String					dapPath			= BoxLangDapService.prepareProgramPathForLaunch( filePath );
+		List<SourceBreakpoint>	dapBreakpoints	= collectDapBreakpoints( breakpointsByFile.get( filePath ) );
+		LOG.debug( "Syncing " + dapBreakpoints.size() + " breakpoints for " + dapPath );
+		return dapService.setBreakpoints( dapPath, dapBreakpoints )
 		    .thenAccept( response -> handleSetBreakpointsResponse( filePath, response ) )
 		    .exceptionally( ex -> {
 			    LOG.warn( "Failed to set breakpoints for " + filePath, ex );

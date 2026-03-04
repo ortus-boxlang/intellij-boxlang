@@ -11,9 +11,11 @@ public class BoxLangResolvedSettings {
 	public String	lspBoxLangHome;
 	public String	lspModules;
 	public String	lspJvmArgs;
+	/** Override folder path containing the bx-lsp module (bypasses managed install). */
+	public String	lspModulePath;
 	public int		lspMaxHeapSize;
 	public String	debuggerVersion;
-	public String	debuggerJarPath;
+	/** Override folder path containing the bx-debugger module (bypasses managed install). */
+	public String	debuggerModulePath;
 	public boolean	useBvmrc;
-	public boolean	promptForDownloads;
 }

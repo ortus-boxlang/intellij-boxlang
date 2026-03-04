@@ -58,6 +58,17 @@ public final class BoxLangVersionCatalog {
 		    .orElseThrow( () -> new IOException( "Unable to resolve BoxLang version >= " + minimum ) );
 	}
 
+	/**
+	 * Returns all available BoxLang runtime version name strings, most recently modified first.
+	 * Suitable for populating a version-picker dialog.
+	 */
+	public static List<String> fetchVersionNames() throws IOException {
+		return loadEntries().stream()
+		    .sorted( Comparator.comparing( BoxLangVersionInfo::modifiedAt ).reversed() )
+		    .map( BoxLangVersionInfo::name )
+		    .toList();
+	}
+
 	public static BoxLangVersionInfo resolveVersionInfo( String version ) throws IOException {
 		String normalized = normalizeName( version );
 		if ( normalized == null ) {

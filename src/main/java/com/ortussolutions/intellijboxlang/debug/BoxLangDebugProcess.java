@@ -292,7 +292,9 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 
 		runToCursorFilePath = filePath;
 
-		dapService.setBreakpoints( filePath, allBreakpoints )
+		// Use the same path aliasing as launch() so the DAP server path is consistent.
+		String dapPath = BoxLangDapService.prepareProgramPathForLaunch( filePath );
+		dapService.setBreakpoints( dapPath, allBreakpoints )
 		    .thenCompose( response -> {
 			    int threadId = getThreadId( context );
 			    if ( threadId != -1 ) {
@@ -322,8 +324,10 @@ public class BoxLangDebugProcess extends XDebugProcess implements BoxLangDapServ
 		if ( runToCursorFilePath != null ) {
 			String rtcFilePath = runToCursorFilePath;
 			runToCursorFilePath = null;
-			List<SourceBreakpoint> originalBreakpoints = breakpointHandler.collectDapBreakpointsForFile( rtcFilePath );
-			dapService.setBreakpoints( rtcFilePath, originalBreakpoints )
+			List<SourceBreakpoint>	originalBreakpoints	= breakpointHandler.collectDapBreakpointsForFile( rtcFilePath );
+			// Use the same path aliasing as launch() so the DAP server path is consistent.
+			String					dapPath				= BoxLangDapService.prepareProgramPathForLaunch( rtcFilePath );
+			dapService.setBreakpoints( dapPath, originalBreakpoints )
 			    .exceptionally( ex -> {
 				    LOG.warn( "Failed to restore breakpoints after run-to-cursor for " + rtcFilePath, ex );
 				    return null;

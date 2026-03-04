@@ -7,9 +7,9 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
-import com.intellij.util.ui.JBUI;
 import com.ortussolutions.intellijboxlang.runtime.InstalledModuleStatus;
 import com.ortussolutions.intellijboxlang.runtime.ModuleStatusResolver;
+import java.awt.BorderLayout;
 import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -22,6 +22,7 @@ import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.event.HyperlinkEvent;
 import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangSettingsForm {
@@ -30,100 +31,187 @@ public final class BoxLangSettingsForm {
 
 	public interface DownloadListener {
 
-		void onDownloadLsp( JComponent sourceComponent );
+		void onDownloadRuntime();
 
-		void onDownloadDebugger( JComponent sourceComponent );
+		void onDownloadLsp();
+
+		void onDownloadDebugger();
+
+		default void onChangeRuntime() {
+		}
+
+		default void onDeleteRuntime() {
+		}
+
+		default void onChangeLsp() {
+		}
+
+		default void onDeleteLsp() {
+		}
+
+		default void onChangeDebugger() {
+		}
+
+		default void onDeleteDebugger() {
+		}
 	}
 
 	private final JPanel			panel;
-	private final JBTextField		boxLangVersionField			= new JBTextField();
-	private final JBTextField		boxLangJarPathField			= new JBTextField();
-	private final JBTextField		boxLangHomeField			= new JBTextField();
-	private final JBTextField		javaHomeField				= new JBTextField();
-	private final JBTextField		lspBoxLangVersionField		= new JBTextField();
-	private final JBTextField		lspBoxLangHomeField			= new JBTextField();
-	private final JBTextField		lspModulesField				= new JBTextField();
-	private final JBTextField		lspJvmArgsField				= new JBTextField();
-	private final JBTextField		lspJarPathField				= new JBTextField();
-	private final JSpinner			lspMaxHeapSizeSpinner		= new JSpinner( new SpinnerNumberModel( 512, 64, 8192, 64 ) );
-	private final JBTextField		debuggerJarPathField		= new JBTextField();
-	private final JBCheckBox		useBvmrcCheckBox			= new JBCheckBox( "Use .bvmrc for BoxLang version" );
-	private final JBCheckBox		promptForDownloadsCheckBox	= new JBCheckBox( "Prompt before downloading BoxLang/LSP" );
+	private final JPanel			formPanel;
+	private final JBTextField		boxLangJarPathField		= new JBTextField();
+	private final JBTextField		boxLangHomeField		= new JBTextField();
+	private final JBTextField		javaHomeField			= new JBTextField();
+	private final JBTextField		lspBoxLangVersionField	= new JBTextField();
+	private final JBTextField		lspBoxLangHomeField		= new JBTextField();
+	private final JBTextField		lspModulesField			= new JBTextField();
+	private final JBTextField		lspJvmArgsField			= new JBTextField();
+	private final JBTextField		lspModulePathField		= new JBTextField();
+	private final JSpinner			lspMaxHeapSizeSpinner	= new JSpinner( new SpinnerNumberModel( 512, 64, 8192, 64 ) );
+	private final JBTextField		debuggerModulePathField	= new JBTextField();
+	private final JBCheckBox		useBvmrcCheckBox		= new JBCheckBox( "Use .bvmrc for BoxLang version" );
 
-	// Status labels and links
-	private final JBLabel			lspStatusLabel				= new JBLabel();
-	private final HyperlinkLabel	lspPathLink					= new HyperlinkLabel();
-	private final HyperlinkLabel	lspDownloadLink				= new HyperlinkLabel( "Download" );
-	private final JBLabel			debuggerStatusLabel			= new JBLabel();
-	private final HyperlinkLabel	debuggerPathLink			= new HyperlinkLabel();
-	private final HyperlinkLabel	debuggerDownloadLink		= new HyperlinkLabel( "Download" );
+	// Runtime status components
+	private final JBLabel			runtimeStatusLabel		= new JBLabel();
+	private final HyperlinkLabel	runtimePathLink			= new HyperlinkLabel();
+	private final HyperlinkLabel	runtimeDownloadLink		= new HyperlinkLabel( "Download" );
+	private final HyperlinkLabel	runtimeChangeLink		= new HyperlinkLabel( "Change" );
+	private final HyperlinkLabel	runtimeDeleteLink		= new HyperlinkLabel( "Delete" );
+	private final JPanel			runtimeStatusPanel;
+
+	// LSP status components
+	private final JBLabel			lspStatusLabel			= new JBLabel();
+	private final HyperlinkLabel	lspPathLink				= new HyperlinkLabel();
+	private final HyperlinkLabel	lspDownloadLink			= new HyperlinkLabel( "Download" );
+	private final HyperlinkLabel	lspChangeLink			= new HyperlinkLabel( "Change" );
+	private final HyperlinkLabel	lspDeleteLink			= new HyperlinkLabel( "Delete" );
 	private final JPanel			lspStatusPanel;
+
+	// Debugger status components
+	private final JBLabel			debuggerStatusLabel		= new JBLabel();
+	private final HyperlinkLabel	debuggerPathLink		= new HyperlinkLabel();
+	private final HyperlinkLabel	debuggerDownloadLink	= new HyperlinkLabel( "Download" );
+	private final HyperlinkLabel	debuggerChangeLink		= new HyperlinkLabel( "Change" );
+	private final HyperlinkLabel	debuggerDeleteLink		= new HyperlinkLabel( "Delete" );
 	private final JPanel			debuggerStatusPanel;
 
 	// Store paths for hyperlink actions
+	private Path					runtimeInstalledPath;
 	private Path					lspInstalledPath;
 	private Path					debuggerInstalledPath;
 
 	private DownloadListener		downloadListener;
 
 	public BoxLangSettingsForm() {
-		// Create status panels with label, path link, and download link
-		lspStatusPanel		= createStatusPanel( lspStatusLabel, lspPathLink, lspDownloadLink );
-		debuggerStatusPanel	= createStatusPanel( debuggerStatusLabel, debuggerPathLink, debuggerDownloadLink );
+		runtimeStatusPanel	= createStatusPanel( runtimeStatusLabel, runtimePathLink, runtimeDownloadLink, runtimeChangeLink,
+		    runtimeDeleteLink );
+		lspStatusPanel		= createStatusPanel( lspStatusLabel, lspPathLink, lspDownloadLink, lspChangeLink, lspDeleteLink );
+		debuggerStatusPanel	= createStatusPanel( debuggerStatusLabel, debuggerPathLink, debuggerDownloadLink,
+		    debuggerChangeLink, debuggerDeleteLink );
 
-		// Set up path link actions (they will use stored paths)
+		lspModulesField.getEmptyText().setText( "e.g. bx-esapi, bx-pdf" );
+
+		// Path link actions
+		runtimePathLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && runtimeInstalledPath != null ) {
+				openInFileBrowser( runtimeInstalledPath );
+			}
+		} );
 		lspPathLink.addHyperlinkListener( e -> {
-			if ( lspInstalledPath != null ) {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && lspInstalledPath != null ) {
 				openInFileBrowser( lspInstalledPath );
 			}
 		} );
 		debuggerPathLink.addHyperlinkListener( e -> {
-			if ( debuggerInstalledPath != null ) {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && debuggerInstalledPath != null ) {
 				openInFileBrowser( debuggerInstalledPath );
 			}
 		} );
 
-		// Set up download link actions
+		// Download (not-installed state)
+		runtimeDownloadLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDownloadRuntime();
+			}
+		} );
 		lspDownloadLink.addHyperlinkListener( e -> {
-			if ( downloadListener != null ) {
-				downloadListener.onDownloadLsp( lspDownloadLink );
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDownloadLsp();
 			}
 		} );
 		debuggerDownloadLink.addHyperlinkListener( e -> {
-			if ( downloadListener != null ) {
-				downloadListener.onDownloadDebugger( debuggerDownloadLink );
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDownloadDebugger();
 			}
 		} );
 
-		panel = FormBuilder.createFormBuilder()
-		    .addLabeledComponent( "BoxLang Version", boxLangVersionField )
-		    .addLabeledComponent( "BoxLang Jar Path", boxLangJarPathField )
+		// Change / Update (installed state)
+		runtimeChangeLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onChangeRuntime();
+			}
+		} );
+		lspChangeLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onChangeLsp();
+			}
+		} );
+		debuggerChangeLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onChangeDebugger();
+			}
+		} );
+
+		// Delete (installed state)
+		runtimeDeleteLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDeleteRuntime();
+			}
+		} );
+		lspDeleteLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDeleteLsp();
+			}
+		} );
+		debuggerDeleteLink.addHyperlinkListener( e -> {
+			if ( e.getEventType() == HyperlinkEvent.EventType.ACTIVATED && downloadListener != null ) {
+				downloadListener.onDeleteDebugger();
+			}
+		} );
+
+		formPanel	= FormBuilder.createFormBuilder()
+		    .addLabeledComponent( "BoxLang Runtime", runtimeStatusPanel )
+		    .addLabeledComponent( "BoxLang Jar Path Override", boxLangJarPathField )
 		    .addLabeledComponent( "BoxLang Home", boxLangHomeField )
 		    .addLabeledComponent( "Java Home", javaHomeField )
 		    .addSeparator()
 		    .addLabeledComponent( "LSP", lspStatusPanel )
-		    .addLabeledComponent( "LSP Jar Path Override", lspJarPathField )
+		    .addLabeledComponent( "LSP Module Path Override", lspModulePathField )
 		    .addLabeledComponent( "LSP BoxLang Version", lspBoxLangVersionField )
 		    .addLabeledComponent( "LSP BoxLang Home", lspBoxLangHomeField )
-		    .addLabeledComponent( "LSP Modules", lspModulesField )
-		    .addLabeledComponent( "LSP JVM Args", lspJvmArgsField )
+		    .addLabeledComponent( "LSP Modules (experimental)", lspModulesField ).addLabeledComponent( "LSP JVM Args", lspJvmArgsField )
 		    .addLabeledComponent( "LSP Max Heap (MB)", lspMaxHeapSizeSpinner )
 		    .addSeparator()
 		    .addLabeledComponent( "Debugger", debuggerStatusPanel )
-		    .addLabeledComponent( "Debugger Jar Path Override", debuggerJarPathField )
+		    .addLabeledComponent( "Debugger Module Path Override", debuggerModulePathField )
 		    .addSeparator()
 		    .addComponent( useBvmrcCheckBox )
-		    .addComponent( promptForDownloadsCheckBox )
 		    .getPanel();
+		panel		= new JPanel( new BorderLayout() );
+		panel.add( formPanel, BorderLayout.NORTH );
 	}
 
-	private JPanel createStatusPanel( JBLabel statusLabel, HyperlinkLabel pathLink, HyperlinkLabel downloadLink ) {
+	private JPanel createStatusPanel( JBLabel statusLabel, HyperlinkLabel pathLink, HyperlinkLabel downloadLink,
+	    HyperlinkLabel changeLink, HyperlinkLabel deleteLink ) {
 		JPanel panel = new JPanel( new FlowLayout( FlowLayout.LEFT, 0, 0 ) );
 		panel.add( statusLabel );
-		panel.add( Box.createRigidArea( new Dimension( 20, 0 ) ) );
+		panel.add( Box.createRigidArea( new Dimension( 8, 0 ) ) );
 		panel.add( pathLink );
-		panel.add( Box.createRigidArea( new Dimension( 20, 0 ) ) );
+		panel.add( Box.createRigidArea( new Dimension( 8, 0 ) ) );
 		panel.add( downloadLink );
+		panel.add( Box.createRigidArea( new Dimension( 8, 0 ) ) );
+		panel.add( changeLink );
+		panel.add( Box.createRigidArea( new Dimension( 8, 0 ) ) );
+		panel.add( deleteLink );
 		return panel;
 	}
 
@@ -136,7 +224,6 @@ public final class BoxLangSettingsForm {
 	}
 
 	public void setEnabled( boolean enabled ) {
-		boxLangVersionField.setEnabled( enabled );
 		boxLangJarPathField.setEnabled( enabled );
 		boxLangHomeField.setEnabled( enabled );
 		javaHomeField.setEnabled( enabled );
@@ -144,15 +231,13 @@ public final class BoxLangSettingsForm {
 		lspBoxLangHomeField.setEnabled( enabled );
 		lspModulesField.setEnabled( enabled );
 		lspJvmArgsField.setEnabled( enabled );
-		lspJarPathField.setEnabled( enabled );
+		lspModulePathField.setEnabled( enabled );
 		lspMaxHeapSizeSpinner.setEnabled( enabled );
-		debuggerJarPathField.setEnabled( enabled );
+		debuggerModulePathField.setEnabled( enabled );
 		useBvmrcCheckBox.setEnabled( enabled );
-		promptForDownloadsCheckBox.setEnabled( enabled );
 	}
 
 	public void reset( BoxLangSettingsState state ) {
-		boxLangVersionField.setText( nullToEmpty( state.boxLangVersion ) );
 		boxLangJarPathField.setText( nullToEmpty( state.boxLangJarPath ) );
 		boxLangHomeField.setText( nullToEmpty( state.boxLangHome ) );
 		javaHomeField.setText( nullToEmpty( state.javaHome ) );
@@ -160,11 +245,10 @@ public final class BoxLangSettingsForm {
 		lspBoxLangHomeField.setText( nullToEmpty( state.lspBoxLangHome ) );
 		lspModulesField.setText( nullToEmpty( state.lspModules ) );
 		lspJvmArgsField.setText( nullToEmpty( state.lspJvmArgs ) );
-		lspJarPathField.setText( nullToEmpty( state.lspJarPath ) );
+		lspModulePathField.setText( nullToEmpty( state.lspModulePath ) );
 		lspMaxHeapSizeSpinner.setValue( state.lspMaxHeapSize );
-		debuggerJarPathField.setText( nullToEmpty( state.debuggerJarPath ) );
+		debuggerModulePathField.setText( nullToEmpty( state.debuggerModulePath ) );
 		useBvmrcCheckBox.setSelected( state.useBvmrc );
-		promptForDownloadsCheckBox.setSelected( state.promptForDownloads );
 	}
 
 	/**
@@ -172,45 +256,85 @@ public final class BoxLangSettingsForm {
 	 * Call this after reset() to show current installation status.
 	 */
 	public void updateModuleStatus( @Nullable Project project ) {
-		// Update LSP status
-		InstalledModuleStatus lspStatus = ModuleStatusResolver.resolveLspStatus( project );
-		if ( lspStatus.installed ) {
-			String versionText = "v" + ( lspStatus.version != null ? lspStatus.version : "unknown" );
-			lspStatusLabel.setText( versionText );
-			if ( lspStatus.path != null ) {
-				setupPathLink( lspPathLink, lspStatus.path, true );
-				lspPathLink.setVisible( true );
-			} else {
-				lspPathLink.setVisible( false );
-			}
-			lspDownloadLink.setVisible( false );
-		} else {
-			lspStatusLabel.setText( "Not installed" );
-			lspPathLink.setVisible( false );
-			lspDownloadLink.setVisible( true );
-		}
+		updateModuleStatus( project, null, null, null );
+	}
 
-		// Update Debugger status
-		InstalledModuleStatus debuggerStatus = ModuleStatusResolver.resolveDebuggerStatus( project );
-		if ( debuggerStatus.installed ) {
-			String versionText = "v" + ( debuggerStatus.version != null ? debuggerStatus.version : "unknown" );
-			debuggerStatusLabel.setText( versionText );
-			if ( debuggerStatus.path != null ) {
-				setupPathLink( debuggerPathLink, debuggerStatus.path, false );
-				debuggerPathLink.setVisible( true );
+	/**
+	 * Updates the module status display, with optional latest version strings for the outdated
+	 * indicator. Pass null for any if the version hasn't been fetched yet.
+	 */
+	public void updateModuleStatus( @Nullable Project project, @Nullable String runtimeLatestVersion,
+	    @Nullable String lspLatestVersion, @Nullable String debuggerLatestVersion ) {
+		// Runtime status
+		InstalledModuleStatus runtimeStatus = ModuleStatusResolver.resolveRuntimeStatus( runtimeLatestVersion );
+		updateStatusPanel(
+		    runtimeStatus,
+		    runtimeStatusLabel,
+		    runtimePathLink,
+		    runtimeDownloadLink,
+		    runtimeChangeLink,
+		    runtimeDeleteLink,
+		    StatusKind.RUNTIME );
+
+		// LSP status
+		InstalledModuleStatus lspStatus = ModuleStatusResolver.resolveLspStatus( project, lspLatestVersion );
+		updateStatusPanel(
+		    lspStatus,
+		    lspStatusLabel,
+		    lspPathLink,
+		    lspDownloadLink,
+		    lspChangeLink,
+		    lspDeleteLink,
+		    StatusKind.LSP );
+
+		// Debugger status
+		InstalledModuleStatus debuggerStatus = ModuleStatusResolver.resolveDebuggerStatus( project, debuggerLatestVersion );
+		updateStatusPanel(
+		    debuggerStatus,
+		    debuggerStatusLabel,
+		    debuggerPathLink,
+		    debuggerDownloadLink,
+		    debuggerChangeLink,
+		    debuggerDeleteLink,
+		    StatusKind.DEBUGGER );
+	}
+
+	private enum StatusKind {
+		RUNTIME, LSP, DEBUGGER
+	}
+
+	private void updateStatusPanel( InstalledModuleStatus status, JBLabel statusLabel, HyperlinkLabel pathLink,
+	    HyperlinkLabel downloadLink, HyperlinkLabel changeLink, HyperlinkLabel deleteLink, StatusKind kind ) {
+		if ( status.installed ) {
+			String versionText = "v" + ( status.version != null ? status.version : "unknown" );
+			if ( status.isOutdated() ) {
+				versionText += "  (latest: " + status.latestVersion + ")";
+				changeLink.setHyperlinkText( "Update" );
 			} else {
-				debuggerPathLink.setVisible( false );
+				changeLink.setHyperlinkText( "Change" );
 			}
-			debuggerDownloadLink.setVisible( false );
+			statusLabel.setText( versionText );
+
+			if ( status.path != null ) {
+				setupPathLink( pathLink, status.path, kind );
+				pathLink.setVisible( true );
+			} else {
+				pathLink.setVisible( false );
+			}
+
+			downloadLink.setVisible( false );
+			changeLink.setVisible( true );
+			deleteLink.setVisible( true );
 		} else {
-			debuggerStatusLabel.setText( "Not installed" );
-			debuggerPathLink.setVisible( false );
-			debuggerDownloadLink.setVisible( true );
+			statusLabel.setText( "Not installed" );
+			pathLink.setVisible( false );
+			downloadLink.setVisible( true );
+			changeLink.setVisible( false );
+			deleteLink.setVisible( false );
 		}
 	}
 
-	private void setupPathLink( HyperlinkLabel link, String path, boolean isLsp ) {
-		// Show shortened path but open full path
+	private void setupPathLink( HyperlinkLabel link, String path, StatusKind kind ) {
 		Path	fullPath		= Path.of( path );
 		Path	parentDir		= fullPath.getParent();
 		String	displayPath		= parentDir != null ? parentDir.toString() : path;
@@ -219,11 +343,11 @@ public final class BoxLangSettingsForm {
 		link.setHyperlinkText( "at ", shortenedPath, "" );
 		link.setToolTipText( displayPath );
 
-		// Store path for the hyperlink action
-		if ( isLsp ) {
-			lspInstalledPath = parentDir != null ? parentDir : fullPath;
-		} else {
-			debuggerInstalledPath = parentDir != null ? parentDir : fullPath;
+		Path installedPath = parentDir != null ? parentDir : fullPath;
+		switch ( kind ) {
+			case RUNTIME -> runtimeInstalledPath = installedPath;
+			case LSP -> lspInstalledPath = installedPath;
+			case DEBUGGER -> debuggerInstalledPath = installedPath;
 		}
 	}
 
@@ -231,7 +355,6 @@ public final class BoxLangSettingsForm {
 		if ( path.length() <= maxLength ) {
 			return path;
 		}
-		// Show beginning and end with ... in middle
 		int halfLength = ( maxLength - 3 ) / 2;
 		return path.substring( 0, halfLength ) + "..." + path.substring( path.length() - halfLength );
 	}
@@ -251,7 +374,6 @@ public final class BoxLangSettingsForm {
 	}
 
 	public void apply( BoxLangSettingsState state ) {
-		state.boxLangVersion		= emptyToNull( boxLangVersionField.getText() );
 		state.boxLangJarPath		= emptyToNull( boxLangJarPathField.getText() );
 		state.boxLangHome			= emptyToNull( boxLangHomeField.getText() );
 		state.javaHome				= emptyToNull( javaHomeField.getText() );
@@ -259,27 +381,24 @@ public final class BoxLangSettingsForm {
 		state.lspBoxLangHome		= emptyToNull( lspBoxLangHomeField.getText() );
 		state.lspModules			= emptyToNull( lspModulesField.getText() );
 		state.lspJvmArgs			= emptyToNull( lspJvmArgsField.getText() );
-		state.lspJarPath			= emptyToNull( lspJarPathField.getText() );
+		state.lspModulePath			= emptyToNull( lspModulePathField.getText() );
 		state.lspMaxHeapSize		= ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue();
-		state.debuggerJarPath		= emptyToNull( debuggerJarPathField.getText() );
+		state.debuggerModulePath	= emptyToNull( debuggerModulePathField.getText() );
 		state.useBvmrc				= useBvmrcCheckBox.isSelected();
-		state.promptForDownloads	= promptForDownloadsCheckBox.isSelected();
 	}
 
 	public boolean isModified( BoxLangSettingsState state ) {
-		return !Objects.equals( state.boxLangVersion, emptyToNull( boxLangVersionField.getText() ) )
-		    || !Objects.equals( state.boxLangJarPath, emptyToNull( boxLangJarPathField.getText() ) )
+		return !Objects.equals( state.boxLangJarPath, emptyToNull( boxLangJarPathField.getText() ) )
 		    || !Objects.equals( state.boxLangHome, emptyToNull( boxLangHomeField.getText() ) )
 		    || !Objects.equals( state.javaHome, emptyToNull( javaHomeField.getText() ) )
 		    || !Objects.equals( state.lspBoxLangVersion, emptyToNull( lspBoxLangVersionField.getText() ) )
 		    || !Objects.equals( state.lspBoxLangHome, emptyToNull( lspBoxLangHomeField.getText() ) )
 		    || !Objects.equals( state.lspModules, emptyToNull( lspModulesField.getText() ) )
 		    || !Objects.equals( state.lspJvmArgs, emptyToNull( lspJvmArgsField.getText() ) )
-		    || !Objects.equals( state.lspJarPath, emptyToNull( lspJarPathField.getText() ) )
+		    || !Objects.equals( state.lspModulePath, emptyToNull( lspModulePathField.getText() ) )
 		    || state.lspMaxHeapSize != ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue()
-		    || !Objects.equals( state.debuggerJarPath, emptyToNull( debuggerJarPathField.getText() ) )
-		    || state.useBvmrc != useBvmrcCheckBox.isSelected()
-		    || state.promptForDownloads != promptForDownloadsCheckBox.isSelected();
+		    || !Objects.equals( state.debuggerModulePath, emptyToNull( debuggerModulePathField.getText() ) )
+		    || state.useBvmrc != useBvmrcCheckBox.isSelected();
 	}
 
 	private String emptyToNull( String value ) {

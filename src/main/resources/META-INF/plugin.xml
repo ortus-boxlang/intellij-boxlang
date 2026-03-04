@@ -76,10 +76,18 @@
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.structure.BoxLangStructureViewFactory" />
 
-    <projectConfigurable
-      id="boxlang.project.settings"
+    <!-- Global (application-level) BoxLang settings -->
+    <applicationConfigurable
+      id="boxlang.settings"
       displayName="BoxLang"
       groupId="language"
+      instance="com.ortussolutions.intellijboxlang.settings.BoxLangApplicationConfigurable" />
+
+    <!-- Per-project overrides, nested under the global BoxLang settings node -->
+    <projectConfigurable
+      id="boxlang.project.settings"
+      displayName="Project Overrides"
+      parentId="boxlang.settings"
       instance="com.ortussolutions.intellijboxlang.settings.BoxLangProjectConfigurable" />
 
     <!-- Run Configuration -->

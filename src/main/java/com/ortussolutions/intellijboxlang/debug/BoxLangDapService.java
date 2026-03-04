@@ -119,33 +119,33 @@ public class BoxLangDapService implements Disposable {
 
 		LOG.info( "Starting BoxLang DAP server" );
 
-		BoxLangResolvedSettings	settings		= BoxLangSettingsResolver.resolve( project );
-		LspBootstrapResult		bootstrap		= BoxLangLspBootstrapService.prepare( project );
-		int						port			= allocatePort();
+		BoxLangResolvedSettings	settings			= BoxLangSettingsResolver.resolve( project );
+		LspBootstrapResult		bootstrap			= BoxLangLspBootstrapService.prepare( project );
+		int						port				= allocatePort();
 
-		// Resolve the debugger JAR path using bootstrap service (may prompt for download)
-		Path					debuggerJarPath	= BoxLangDebuggerBootstrapService.ensureDebugger( project, bootstrap );
-		if ( debuggerJarPath == null ) {
+		// Resolve the debugger module directory (parent of bx-debugger/) using bootstrap service
+		Path					debuggerModulesDir	= BoxLangDebuggerBootstrapService.ensureDebugger( project, bootstrap );
+		if ( debuggerModulesDir == null ) {
 			throw new IllegalStateException(
-			    "BoxLang Debugger JAR not found. Please configure the Debugger Version in BoxLang settings, " +
+			    "BoxLang Debugger module not found. Please configure the Debugger Version in BoxLang settings, " +
 			        "or ensure the bx-debugger module is installed in BoxLang home." );
 		}
 
-		// Build classpath with both BoxLang runtime and debugger JARs
-		String				classpath	= bootstrap.boxLangJarPath.toString() +
-		    java.io.File.pathSeparator + debuggerJarPath.toString();
-
-		GeneralCommandLine	commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
+		GeneralCommandLine commandLine = new GeneralCommandLine( resolveJavaExecutable( settings ) );
 		commandLine.withCharset( StandardCharsets.UTF_8 );
+
+		// Set up environment to match how the LSP is launched
 		commandLine.withEnvironment( "BOXLANG_HOME", bootstrap.lspBoxLangHome.toString() );
+		commandLine.withEnvironment( "BOXLANG_MODULESDIRECTORY", debuggerModulesDir.toString() );
+		commandLine.withEnvironment( "CLASSPATH", bootstrap.boxLangJarPath.toString() );
 		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
 			commandLine.withEnvironment( "JAVA_HOME", settings.javaHome );
 		}
 
+		// Launch via BoxRunner as a module, matching how bx-lsp is invoked
 		commandLine.addParameters( buildJvmArgs( settings ) );
-		commandLine.addParameter( "-cp" );
-		commandLine.addParameter( classpath );
-		commandLine.addParameter( "ortus.boxlang.bxdebugger.BoxDebugger" );
+		commandLine.addParameter( "ortus.boxlang.runtime.BoxRunner" );
+		commandLine.addParameter( "module:bx-debugger" );
 		commandLine.addParameter( String.valueOf( port ) );
 
 		LOG.info( "Starting DAP server process" );
