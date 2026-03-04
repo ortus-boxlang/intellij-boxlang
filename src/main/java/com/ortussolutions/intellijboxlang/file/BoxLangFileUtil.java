@@ -25,6 +25,8 @@ public final class BoxLangFileUtil {
 		String normalized = extension.toLowerCase( Locale.ROOT );
 		return normalized.equals( "bx" )
 		    || normalized.equals( "bxs" )
-		    || normalized.equals( "bxm" );
+		    || normalized.equals( "bxm" )
+		    || normalized.equals( "cfc" )
+		    || normalized.equals( "cfm" );
 	}
 }

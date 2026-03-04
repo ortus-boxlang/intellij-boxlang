@@ -17,7 +17,7 @@
 
     <h2>Features</h2>
     <ul>
-      <li><strong>Syntax Highlighting</strong> - Full lexer-based highlighting for .bx, .bxm, and .bxs files with customizable color schemes</li>
+      <li><strong>Syntax Highlighting</strong> - Full lexer-based highlighting for .bx, .bxm, .bxs, .cfc, and .cfm files with customizable color schemes</li>
       <li><strong>LSP Integration</strong> - Semantic tokens, real-time diagnostics, and document symbols via Language Server Protocol</li>
       <li><strong>Run Configurations</strong> - Execute BoxLang scripts directly with configurable arguments and environment</li>
       <li><strong>Debugger</strong> - Full debugging support with breakpoints, stepping, variable inspection, watch expressions, and expression evaluation</li>
@@ -55,7 +55,7 @@
     <fileType
       name="BoxLang"
       language="BoxLang"
-      extensions="bx;bxm;bxs"
+      extensions="bx;bxm;bxs;cfc;cfm"
       implementationClass="com.ortussolutions.intellijboxlang.file.BoxLangFileType" />
 
     <lang.parserDefinition
