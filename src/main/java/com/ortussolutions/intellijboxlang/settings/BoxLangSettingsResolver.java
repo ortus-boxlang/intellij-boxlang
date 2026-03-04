@@ -23,6 +23,7 @@ public final class BoxLangSettingsResolver {
 			resolved.lspModules			= orFallback( projectState.lspModules, appState.lspModules );
 			resolved.lspJvmArgs			= orFallback( projectState.lspJvmArgs, appState.lspJvmArgs );
 			resolved.lspMaxHeapSize		= projectState.lspMaxHeapSize != 0 ? projectState.lspMaxHeapSize : appState.lspMaxHeapSize;
+			resolved.debuggerVersion	= orFallback( projectState.debuggerVersion, appState.debuggerVersion );
 			resolved.debuggerJarPath	= orFallback( projectState.debuggerJarPath, appState.debuggerJarPath );
 			resolved.useBvmrc			= projectState.useBvmrc;
 			resolved.promptForDownloads	= projectState.promptForDownloads;
@@ -37,6 +38,7 @@ public final class BoxLangSettingsResolver {
 			resolved.lspModules			= appState.lspModules;
 			resolved.lspJvmArgs			= appState.lspJvmArgs;
 			resolved.lspMaxHeapSize		= appState.lspMaxHeapSize;
+			resolved.debuggerVersion	= appState.debuggerVersion;
 			resolved.debuggerJarPath	= appState.debuggerJarPath;
 			resolved.useBvmrc			= appState.useBvmrc;
 			resolved.promptForDownloads	= appState.promptForDownloads;

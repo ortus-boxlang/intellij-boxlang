@@ -6,6 +6,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.util.execution.ParametersListUtil;
+import com.ortussolutions.intellijboxlang.runtime.BoxLangDebuggerBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
@@ -122,17 +123,17 @@ public class BoxLangDapService implements Disposable {
 		LspBootstrapResult		bootstrap		= BoxLangLspBootstrapService.prepare( project );
 		int						port			= allocatePort();
 
-		// Resolve the debugger JAR path
-		String					debuggerJarPath	= resolveDebuggerJarPath( settings, bootstrap );
+		// Resolve the debugger JAR path using bootstrap service (may prompt for download)
+		Path					debuggerJarPath	= BoxLangDebuggerBootstrapService.ensureDebugger( project, bootstrap );
 		if ( debuggerJarPath == null ) {
 			throw new IllegalStateException(
-			    "BoxLang Debugger JAR not found. Please configure the Debugger Jar Path in BoxLang settings, " +
+			    "BoxLang Debugger JAR not found. Please configure the Debugger Version in BoxLang settings, " +
 			        "or ensure the bx-debugger module is installed in BoxLang home." );
 		}
 
 		// Build classpath with both BoxLang runtime and debugger JARs
 		String				classpath	= bootstrap.boxLangJarPath.toString() +
-		    java.io.File.pathSeparator + debuggerJarPath;
+		    java.io.File.pathSeparator + debuggerJarPath.toString();
 
 		GeneralCommandLine	commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
 		commandLine.withCharset( StandardCharsets.UTF_8 );
@@ -186,64 +187,6 @@ public class BoxLangDapService implements Disposable {
 			cleanupFailedStart();
 			throw e;
 		}
-	}
-
-	/**
-	 * Resolves the path to the bx-debugger JAR.
-	 * Checks in order:
-	 * 1. Configured debuggerJarPath in settings
-	 * 2. Project BoxLang home modules directory
-	 * 3. User BoxLang home modules directory (~/.boxlang/modules)
-	 */
-	private String resolveDebuggerJarPath( BoxLangResolvedSettings settings, LspBootstrapResult bootstrap ) {
-		// 1. Check configured path in settings
-		if ( settings.debuggerJarPath != null && !settings.debuggerJarPath.isBlank() ) {
-			Path configuredPath = Path.of( settings.debuggerJarPath );
-			if ( configuredPath.toFile().exists() ) {
-				return configuredPath.toString();
-			}
-			LOG.warn( "Configured debugger JAR not found: " + settings.debuggerJarPath );
-		}
-
-		// 2. Check project BoxLang home modules directory
-		Path	projectBoxLangHome	= bootstrap.lspBoxLangHome;
-		String	jarPath				= findDebuggerJarInHome( projectBoxLangHome, "project BoxLang home" );
-		if ( jarPath != null ) {
-			return jarPath;
-		}
-
-		// 3. Check user BoxLang home modules directory (~/.boxlang)
-		String	userHome		= System.getProperty( "user.home" );
-		Path	userBoxLangHome	= Path.of( userHome, ".boxlang" );
-		jarPath = findDebuggerJarInHome( userBoxLangHome, "user BoxLang home" );
-		if ( jarPath != null ) {
-			return jarPath;
-		}
-
-		LOG.warn( "Could not find bx-debugger JAR in any location" );
-		return null;
-	}
-
-	/**
-	 * Searches for the bx-debugger JAR in the modules directory of a BoxLang home.
-	 */
-	private String findDebuggerJarInHome( Path boxLangHome, String locationName ) {
-		if ( boxLangHome == null || !boxLangHome.toFile().exists() ) {
-			return null;
-		}
-
-		// Check for the module in the modules directory
-		Path modulesDir = boxLangHome.resolve( "modules" ).resolve( "bx-debugger" ).resolve( "libs" );
-		if ( modulesDir.toFile().exists() ) {
-			// Find the debugger JAR in the libs directory
-			java.io.File[] jars = modulesDir.toFile().listFiles( ( dir, name ) -> name.startsWith( "bx-debugger" ) && name.endsWith( ".jar" ) );
-			if ( jars != null && jars.length > 0 ) {
-				LOG.info( "Using debugger JAR from " + locationName );
-				return jars[ 0 ].getAbsolutePath();
-			}
-		}
-
-		return null;
 	}
 
 	/**
