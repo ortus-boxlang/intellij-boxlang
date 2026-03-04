@@ -121,7 +121,7 @@ public final class BoxLangSettingsForm {
 		panel.add( pathLink );
 		pathLink.setBorder( JBUI.Borders.emptyLeft( 5 ) );
 		panel.add( downloadLink );
-		downloadLink.setBorder( JBUI.Borders.emptyLeft( 15 ) );
+		downloadLink.setBorder( JBUI.Borders.emptyLeft( 30 ) );
 		return panel;
 	}
 
