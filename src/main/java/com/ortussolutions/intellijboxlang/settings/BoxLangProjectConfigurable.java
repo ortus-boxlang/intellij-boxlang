@@ -16,8 +16,11 @@ import com.ortussolutions.intellijboxlang.runtime.BoxLangLspHomeResolver;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Consumer;
 import javax.swing.JComponent;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -49,13 +52,13 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		form.setDownloadListener( new BoxLangSettingsForm.DownloadListener() {
 
 			@Override
-			public void onDownloadLsp() {
-				downloadLsp();
+			public void onDownloadLsp( JComponent sourceComponent ) {
+				downloadLsp( sourceComponent );
 			}
 
 			@Override
-			public void onDownloadDebugger() {
-				downloadDebugger();
+			public void onDownloadDebugger( JComponent sourceComponent ) {
+				downloadDebugger( sourceComponent );
 			}
 		} );
 
@@ -158,8 +161,23 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		form.updateModuleStatus( project );
 	}
 
-	private void downloadLsp() {
-		// Fetch available versions in background, then show picker on EDT
+	private void showVersionPopupMenu( JComponent sourceComponent, List<String> versions, Consumer<String> downloadAction ) {
+		if ( versions.isEmpty() ) {
+			return;
+		}
+
+		JPopupMenu popupMenu = new JPopupMenu();
+		for ( String version : versions ) {
+			JMenuItem item = new JMenuItem( version );
+			item.addActionListener( e -> downloadAction.accept( version ) );
+			popupMenu.add( item );
+		}
+
+		popupMenu.show( sourceComponent, 0, sourceComponent.getHeight() );
+	}
+
+	private void downloadLsp( JComponent sourceComponent ) {
+		// Fetch available versions in background, then show popup menu on EDT
 		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Fetching LSP Versions", true ) {
 
 			@Override
@@ -168,12 +186,9 @@ public final class BoxLangProjectConfigurable implements Configurable {
 					indicator.setText( "Fetching available versions from ForgeBox..." );
 					List<String> versions = ForgeBoxVersionFetcher.fetchLspVersions();
 
-					// Show picker dialog on EDT
+					// Show popup menu on EDT
 					ApplicationManager.getApplication().invokeLater( () -> {
-						String selectedVersion = VersionPickerDialog.showAndGetVersion( project, "BoxLang LSP", versions );
-						if ( selectedVersion != null ) {
-							downloadLspVersion( selectedVersion );
-						}
+						showVersionPopupMenu( sourceComponent, versions, BoxLangProjectConfigurable.this::downloadLspVersion );
 					} );
 				} catch ( IOException e ) {
 					// Error will be shown in indicator or logged
@@ -217,8 +232,8 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		}
 	}
 
-	private void downloadDebugger() {
-		// Fetch available versions in background, then show picker on EDT
+	private void downloadDebugger( JComponent sourceComponent ) {
+		// Fetch available versions in background, then show popup menu on EDT
 		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Fetching Debugger Versions", true ) {
 
 			@Override
@@ -227,12 +242,9 @@ public final class BoxLangProjectConfigurable implements Configurable {
 					indicator.setText( "Fetching available versions from ForgeBox..." );
 					List<String> versions = ForgeBoxVersionFetcher.fetchDebuggerVersions();
 
-					// Show picker dialog on EDT
+					// Show popup menu on EDT
 					ApplicationManager.getApplication().invokeLater( () -> {
-						String selectedVersion = VersionPickerDialog.showAndGetVersion( project, "BoxLang Debugger", versions );
-						if ( selectedVersion != null ) {
-							downloadDebuggerVersion( selectedVersion );
-						}
+						showVersionPopupMenu( sourceComponent, versions, BoxLangProjectConfigurable.this::downloadDebuggerVersion );
 					} );
 				} catch ( IOException e ) {
 					// Error will be shown in indicator or logged

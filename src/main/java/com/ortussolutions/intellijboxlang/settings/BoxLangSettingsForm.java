@@ -30,9 +30,9 @@ public final class BoxLangSettingsForm {
 
 	public interface DownloadListener {
 
-		void onDownloadLsp();
+		void onDownloadLsp( JComponent sourceComponent );
 
-		void onDownloadDebugger();
+		void onDownloadDebugger( JComponent sourceComponent );
 	}
 
 	private final JPanel			panel;
@@ -86,12 +86,12 @@ public final class BoxLangSettingsForm {
 		// Set up download link actions
 		lspDownloadLink.addHyperlinkListener( e -> {
 			if ( downloadListener != null ) {
-				downloadListener.onDownloadLsp();
+				downloadListener.onDownloadLsp( lspDownloadLink );
 			}
 		} );
 		debuggerDownloadLink.addHyperlinkListener( e -> {
 			if ( downloadListener != null ) {
-				downloadListener.onDownloadDebugger();
+				downloadListener.onDownloadDebugger( debuggerDownloadLink );
 			}
 		} );
 
