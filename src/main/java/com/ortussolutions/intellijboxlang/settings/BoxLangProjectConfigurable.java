@@ -10,14 +10,12 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.util.ui.FormBuilder;
 import com.ortussolutions.intellijboxlang.runtime.ForgeBoxDebuggerInstaller;
-import com.ortussolutions.intellijboxlang.runtime.ForgeBoxDebuggerResolver;
-import com.ortussolutions.intellijboxlang.runtime.ForgeBoxDebuggerDescriptor;
 import com.ortussolutions.intellijboxlang.runtime.ForgeBoxLspInstaller;
-import com.ortussolutions.intellijboxlang.runtime.ForgeBoxLspResolver;
-import com.ortussolutions.intellijboxlang.runtime.ForgeBoxLspDescriptor;
+import com.ortussolutions.intellijboxlang.runtime.ForgeBoxVersionFetcher;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspHomeResolver;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import org.jetbrains.annotations.Nls;
@@ -160,22 +158,43 @@ public final class BoxLangProjectConfigurable implements Configurable {
 	}
 
 	private void downloadLsp() {
-		BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
-		String					version		= settings.lspVersion;
+		// Fetch available versions in background, then show picker on EDT
+		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Fetching LSP Versions", true ) {
 
+			@Override
+			public void run( @NotNull ProgressIndicator indicator ) {
+				try {
+					indicator.setText( "Fetching available versions from ForgeBox..." );
+					List<String> versions = ForgeBoxVersionFetcher.fetchLspVersions();
+
+					// Show picker dialog on EDT
+					ApplicationManager.getApplication().invokeLater( () -> {
+						String selectedVersion = VersionPickerDialog.showAndGetVersion( project, "BoxLang LSP", versions );
+						if ( selectedVersion != null ) {
+							downloadLspVersion( selectedVersion );
+						}
+					} );
+				} catch ( IOException e ) {
+					// Error will be shown in indicator or logged
+				}
+			}
+		} );
+	}
+
+	private void downloadLspVersion( String version ) {
 		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Downloading BoxLang LSP", true ) {
 
 			@Override
 			public void run( @NotNull ProgressIndicator indicator ) {
 				try {
-					ForgeBoxLspDescriptor	descriptor	= ForgeBoxLspResolver.resolve( version );
-					Path					targetDir	= BoxLangStoragePaths.getLspCacheRoot()
-					    .resolve( descriptor.version )
+					Path targetDir = BoxLangStoragePaths.getLspCacheRoot()
+					    .resolve( version )
 					    .resolve( "bx-lsp" );
-					ForgeBoxLspInstaller.install( descriptor.version, targetDir, indicator );
+					ForgeBoxLspInstaller.install( version, targetDir, indicator );
 
-					// Refresh UI on EDT
+					// Update settings with downloaded version
 					ApplicationManager.getApplication().invokeLater( () -> {
+						updateLspVersionInSettings( version );
 						if ( form != null ) {
 							form.updateModuleStatus( project );
 						}
@@ -187,22 +206,55 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		} );
 	}
 
+	private void updateLspVersionInSettings( String version ) {
+		if ( useProjectSettingsCheckBox.isSelected() ) {
+			BoxLangProjectSettingsState state = BoxLangProjectSettings.getInstance( project ).getSettings();
+			state.lspVersion = version;
+		} else {
+			BoxLangSettingsState state = BoxLangApplicationSettings.getInstance().getSettings();
+			state.lspVersion = version;
+		}
+	}
+
 	private void downloadDebugger() {
-		BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
-		String					version		= settings.debuggerVersion;
+		// Fetch available versions in background, then show picker on EDT
+		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Fetching Debugger Versions", true ) {
+
+			@Override
+			public void run( @NotNull ProgressIndicator indicator ) {
+				try {
+					indicator.setText( "Fetching available versions from ForgeBox..." );
+					List<String> versions = ForgeBoxVersionFetcher.fetchDebuggerVersions();
+
+					// Show picker dialog on EDT
+					ApplicationManager.getApplication().invokeLater( () -> {
+						String selectedVersion = VersionPickerDialog.showAndGetVersion( project, "BoxLang Debugger", versions );
+						if ( selectedVersion != null ) {
+							downloadDebuggerVersion( selectedVersion );
+						}
+					} );
+				} catch ( IOException e ) {
+					// Error will be shown in indicator or logged
+				}
+			}
+		} );
+	}
+
+	private void downloadDebuggerVersion( String version ) {
+		BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve( project );
 
 		ProgressManager.getInstance().run( new Task.Backgroundable( project, "Downloading BoxLang Debugger", true ) {
 
 			@Override
 			public void run( @NotNull ProgressIndicator indicator ) {
 				try {
-					ForgeBoxDebuggerDescriptor	descriptor	= ForgeBoxDebuggerResolver.resolve( version );
-					Path						boxLangHome	= BoxLangLspHomeResolver.resolve( project, settings );
-					Path						targetDir	= boxLangHome.resolve( "modules" ).resolve( "bx-debugger" );
-					ForgeBoxDebuggerInstaller.install( descriptor.version, targetDir, indicator );
+					Path	boxLangHome	= BoxLangLspHomeResolver.resolve( project, settings );
+					Path	targetDir	= boxLangHome.resolve( "modules" ).resolve( "bx-debugger" );
+					ForgeBoxDebuggerInstaller.install( version, targetDir, indicator );
 
-					// Refresh UI on EDT
+					// Update settings with downloaded version
 					ApplicationManager.getApplication().invokeLater( () -> {
+						updateDebuggerVersionInSettings( version );
 						if ( form != null ) {
 							form.updateModuleStatus( project );
 						}
@@ -212,6 +264,16 @@ public final class BoxLangProjectConfigurable implements Configurable {
 				}
 			}
 		} );
+	}
+
+	private void updateDebuggerVersionInSettings( String version ) {
+		if ( useProjectSettingsCheckBox.isSelected() ) {
+			BoxLangProjectSettingsState state = BoxLangProjectSettings.getInstance( project ).getSettings();
+			state.debuggerVersion = version;
+		} else {
+			BoxLangSettingsState state = BoxLangApplicationSettings.getInstance().getSettings();
+			state.debuggerVersion = version;
+		}
 	}
 
 	static BoxLangSettingsState mergeWithDefaults( BoxLangProjectSettingsState state, BoxLangSettingsState defaults ) {

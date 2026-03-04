@@ -1,6 +1,5 @@
 package com.ortussolutions.intellijboxlang.settings;
 
-import com.intellij.ide.BrowserUtil;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import com.intellij.ui.HyperlinkLabel;
@@ -39,24 +38,21 @@ public final class BoxLangSettingsForm {
 	private final JBTextField		boxLangJarPathField			= new JBTextField();
 	private final JBTextField		boxLangHomeField			= new JBTextField();
 	private final JBTextField		javaHomeField				= new JBTextField();
-	private final JBTextField		lspVersionField				= new JBTextField();
 	private final JBTextField		lspBoxLangVersionField		= new JBTextField();
 	private final JBTextField		lspBoxLangHomeField			= new JBTextField();
 	private final JBTextField		lspModulesField				= new JBTextField();
 	private final JBTextField		lspJvmArgsField				= new JBTextField();
 	private final JSpinner			lspMaxHeapSizeSpinner		= new JSpinner( new SpinnerNumberModel( 512, 64, 8192, 64 ) );
-	private final JBTextField		debuggerVersionField		= new JBTextField();
-	private final JBTextField		debuggerJarPathField		= new JBTextField();
 	private final JBCheckBox		useBvmrcCheckBox			= new JBCheckBox( "Use .bvmrc for BoxLang version" );
 	private final JBCheckBox		promptForDownloadsCheckBox	= new JBCheckBox( "Prompt before downloading BoxLang/LSP" );
 
 	// Status labels and links
 	private final JBLabel			lspStatusLabel				= new JBLabel();
 	private final HyperlinkLabel	lspPathLink					= new HyperlinkLabel();
+	private final HyperlinkLabel	lspDownloadLink				= new HyperlinkLabel( "Download" );
 	private final JBLabel			debuggerStatusLabel			= new JBLabel();
 	private final HyperlinkLabel	debuggerPathLink			= new HyperlinkLabel();
-	private final HyperlinkLabel	lspDownloadLink				= new HyperlinkLabel( "Download LSP" );
-	private final HyperlinkLabel	debuggerDownloadLink		= new HyperlinkLabel( "Download Debugger" );
+	private final HyperlinkLabel	debuggerDownloadLink		= new HyperlinkLabel( "Download" );
 	private final JPanel			lspStatusPanel;
 	private final JPanel			debuggerStatusPanel;
 
@@ -101,17 +97,14 @@ public final class BoxLangSettingsForm {
 		    .addLabeledComponent( "BoxLang Home", boxLangHomeField )
 		    .addLabeledComponent( "Java Home", javaHomeField )
 		    .addSeparator()
-		    .addLabeledComponent( "LSP Version", lspVersionField )
-		    .addLabeledComponent( "LSP Status", lspStatusPanel )
+		    .addLabeledComponent( "LSP", lspStatusPanel )
 		    .addLabeledComponent( "LSP BoxLang Version", lspBoxLangVersionField )
 		    .addLabeledComponent( "LSP BoxLang Home", lspBoxLangHomeField )
 		    .addLabeledComponent( "LSP Modules", lspModulesField )
 		    .addLabeledComponent( "LSP JVM Args", lspJvmArgsField )
 		    .addLabeledComponent( "LSP Max Heap (MB)", lspMaxHeapSizeSpinner )
 		    .addSeparator()
-		    .addLabeledComponent( "Debugger Version", debuggerVersionField )
-		    .addLabeledComponent( "Debugger Status", debuggerStatusPanel )
-		    .addLabeledComponent( "Debugger Jar Path", debuggerJarPathField )
+		    .addLabeledComponent( "Debugger", debuggerStatusPanel )
 		    .addSeparator()
 		    .addComponent( useBvmrcCheckBox )
 		    .addComponent( promptForDownloadsCheckBox )
@@ -141,14 +134,11 @@ public final class BoxLangSettingsForm {
 		boxLangJarPathField.setEnabled( enabled );
 		boxLangHomeField.setEnabled( enabled );
 		javaHomeField.setEnabled( enabled );
-		lspVersionField.setEnabled( enabled );
 		lspBoxLangVersionField.setEnabled( enabled );
 		lspBoxLangHomeField.setEnabled( enabled );
 		lspModulesField.setEnabled( enabled );
 		lspJvmArgsField.setEnabled( enabled );
 		lspMaxHeapSizeSpinner.setEnabled( enabled );
-		debuggerVersionField.setEnabled( enabled );
-		debuggerJarPathField.setEnabled( enabled );
 		useBvmrcCheckBox.setEnabled( enabled );
 		promptForDownloadsCheckBox.setEnabled( enabled );
 	}
@@ -158,14 +148,11 @@ public final class BoxLangSettingsForm {
 		boxLangJarPathField.setText( nullToEmpty( state.boxLangJarPath ) );
 		boxLangHomeField.setText( nullToEmpty( state.boxLangHome ) );
 		javaHomeField.setText( nullToEmpty( state.javaHome ) );
-		lspVersionField.setText( nullToEmpty( state.lspVersion ) );
 		lspBoxLangVersionField.setText( nullToEmpty( state.lspBoxLangVersion ) );
 		lspBoxLangHomeField.setText( nullToEmpty( state.lspBoxLangHome ) );
 		lspModulesField.setText( nullToEmpty( state.lspModules ) );
 		lspJvmArgsField.setText( nullToEmpty( state.lspJvmArgs ) );
 		lspMaxHeapSizeSpinner.setValue( state.lspMaxHeapSize );
-		debuggerVersionField.setText( nullToEmpty( state.debuggerVersion ) );
-		debuggerJarPathField.setText( nullToEmpty( state.debuggerJarPath ) );
 		useBvmrcCheckBox.setSelected( state.useBvmrc );
 		promptForDownloadsCheckBox.setSelected( state.promptForDownloads );
 	}
@@ -178,7 +165,7 @@ public final class BoxLangSettingsForm {
 		// Update LSP status
 		InstalledModuleStatus lspStatus = ModuleStatusResolver.resolveLspStatus( project );
 		if ( lspStatus.installed ) {
-			String versionText = "Installed: v" + ( lspStatus.version != null ? lspStatus.version : "unknown" );
+			String versionText = "v" + ( lspStatus.version != null ? lspStatus.version : "unknown" );
 			lspStatusLabel.setText( versionText );
 			if ( lspStatus.path != null ) {
 				setupPathLink( lspPathLink, lspStatus.path, true );
@@ -196,7 +183,7 @@ public final class BoxLangSettingsForm {
 		// Update Debugger status
 		InstalledModuleStatus debuggerStatus = ModuleStatusResolver.resolveDebuggerStatus( project );
 		if ( debuggerStatus.installed ) {
-			String versionText = "Installed: v" + ( debuggerStatus.version != null ? debuggerStatus.version : "unknown" );
+			String versionText = "v" + ( debuggerStatus.version != null ? debuggerStatus.version : "unknown" );
 			debuggerStatusLabel.setText( versionText );
 			if ( debuggerStatus.path != null ) {
 				setupPathLink( debuggerPathLink, debuggerStatus.path, false );
@@ -258,14 +245,11 @@ public final class BoxLangSettingsForm {
 		state.boxLangJarPath		= emptyToNull( boxLangJarPathField.getText() );
 		state.boxLangHome			= emptyToNull( boxLangHomeField.getText() );
 		state.javaHome				= emptyToNull( javaHomeField.getText() );
-		state.lspVersion			= emptyToNull( lspVersionField.getText() );
 		state.lspBoxLangVersion		= emptyToNull( lspBoxLangVersionField.getText() );
 		state.lspBoxLangHome		= emptyToNull( lspBoxLangHomeField.getText() );
 		state.lspModules			= emptyToNull( lspModulesField.getText() );
 		state.lspJvmArgs			= emptyToNull( lspJvmArgsField.getText() );
 		state.lspMaxHeapSize		= ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue();
-		state.debuggerVersion		= emptyToNull( debuggerVersionField.getText() );
-		state.debuggerJarPath		= emptyToNull( debuggerJarPathField.getText() );
 		state.useBvmrc				= useBvmrcCheckBox.isSelected();
 		state.promptForDownloads	= promptForDownloadsCheckBox.isSelected();
 	}
@@ -275,14 +259,11 @@ public final class BoxLangSettingsForm {
 		    || !Objects.equals( state.boxLangJarPath, emptyToNull( boxLangJarPathField.getText() ) )
 		    || !Objects.equals( state.boxLangHome, emptyToNull( boxLangHomeField.getText() ) )
 		    || !Objects.equals( state.javaHome, emptyToNull( javaHomeField.getText() ) )
-		    || !Objects.equals( state.lspVersion, emptyToNull( lspVersionField.getText() ) )
 		    || !Objects.equals( state.lspBoxLangVersion, emptyToNull( lspBoxLangVersionField.getText() ) )
 		    || !Objects.equals( state.lspBoxLangHome, emptyToNull( lspBoxLangHomeField.getText() ) )
 		    || !Objects.equals( state.lspModules, emptyToNull( lspModulesField.getText() ) )
 		    || !Objects.equals( state.lspJvmArgs, emptyToNull( lspJvmArgsField.getText() ) )
 		    || state.lspMaxHeapSize != ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue()
-		    || !Objects.equals( state.debuggerVersion, emptyToNull( debuggerVersionField.getText() ) )
-		    || !Objects.equals( state.debuggerJarPath, emptyToNull( debuggerJarPathField.getText() ) )
 		    || state.useBvmrc != useBvmrcCheckBox.isSelected()
 		    || state.promptForDownloads != promptForDownloadsCheckBox.isSelected();
 	}
