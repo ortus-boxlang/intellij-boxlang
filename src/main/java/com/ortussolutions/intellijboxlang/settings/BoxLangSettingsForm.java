@@ -11,11 +11,13 @@ import com.intellij.util.ui.JBUI;
 import com.ortussolutions.intellijboxlang.runtime.InstalledModuleStatus;
 import com.ortussolutions.intellijboxlang.runtime.ModuleStatusResolver;
 import java.awt.Desktop;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
+import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JSpinner;
@@ -118,10 +120,10 @@ public final class BoxLangSettingsForm {
 	private JPanel createStatusPanel( JBLabel statusLabel, HyperlinkLabel pathLink, HyperlinkLabel downloadLink ) {
 		JPanel panel = new JPanel( new FlowLayout( FlowLayout.LEFT, 0, 0 ) );
 		panel.add( statusLabel );
+		panel.add( Box.createRigidArea( new Dimension( 20, 0 ) ) );
 		panel.add( pathLink );
-		pathLink.setBorder( JBUI.Borders.emptyLeft( 5 ) );
+		panel.add( Box.createRigidArea( new Dimension( 20, 0 ) ) );
 		panel.add( downloadLink );
-		downloadLink.setBorder( JBUI.Borders.emptyLeft( 30 ) );
 		return panel;
 	}
 
