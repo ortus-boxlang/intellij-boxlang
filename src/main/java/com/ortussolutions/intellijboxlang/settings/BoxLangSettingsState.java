@@ -11,6 +11,7 @@ public class BoxLangSettingsState {
 	public String	lspBoxLangHome;
 	public String	lspModules;
 	public String	lspJvmArgs;
+	public String	lspJarPath;
 	public int		lspMaxHeapSize		= 512;
 	public String	debuggerVersion;
 	public String	debuggerJarPath;

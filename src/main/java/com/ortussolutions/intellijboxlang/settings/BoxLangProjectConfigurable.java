@@ -130,6 +130,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		state.lspBoxLangHome		= null;
 		state.lspModules			= null;
 		state.lspJvmArgs			= null;
+		state.lspJarPath			= null;
 		state.debuggerVersion		= null;
 		state.debuggerJarPath		= null;
 		state.lspMaxHeapSize		= defaults.lspMaxHeapSize;
@@ -287,6 +288,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 		merged.lspBoxLangHome		= state.lspBoxLangHome != null ? state.lspBoxLangHome : defaults.lspBoxLangHome;
 		merged.lspModules			= state.lspModules != null ? state.lspModules : defaults.lspModules;
 		merged.lspJvmArgs			= state.lspJvmArgs != null ? state.lspJvmArgs : defaults.lspJvmArgs;
+		merged.lspJarPath			= state.lspJarPath != null ? state.lspJarPath : defaults.lspJarPath;
 		merged.debuggerVersion		= state.debuggerVersion != null ? state.debuggerVersion : defaults.debuggerVersion;
 		merged.debuggerJarPath		= state.debuggerJarPath != null ? state.debuggerJarPath : defaults.debuggerJarPath;
 		merged.lspMaxHeapSize		= state.lspMaxHeapSize != 0 ? state.lspMaxHeapSize : defaults.lspMaxHeapSize;

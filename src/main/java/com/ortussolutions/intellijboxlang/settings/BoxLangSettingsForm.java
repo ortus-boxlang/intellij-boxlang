@@ -42,7 +42,9 @@ public final class BoxLangSettingsForm {
 	private final JBTextField		lspBoxLangHomeField			= new JBTextField();
 	private final JBTextField		lspModulesField				= new JBTextField();
 	private final JBTextField		lspJvmArgsField				= new JBTextField();
+	private final JBTextField		lspJarPathField				= new JBTextField();
 	private final JSpinner			lspMaxHeapSizeSpinner		= new JSpinner( new SpinnerNumberModel( 512, 64, 8192, 64 ) );
+	private final JBTextField		debuggerJarPathField		= new JBTextField();
 	private final JBCheckBox		useBvmrcCheckBox			= new JBCheckBox( "Use .bvmrc for BoxLang version" );
 	private final JBCheckBox		promptForDownloadsCheckBox	= new JBCheckBox( "Prompt before downloading BoxLang/LSP" );
 
@@ -98,6 +100,7 @@ public final class BoxLangSettingsForm {
 		    .addLabeledComponent( "Java Home", javaHomeField )
 		    .addSeparator()
 		    .addLabeledComponent( "LSP", lspStatusPanel )
+		    .addLabeledComponent( "LSP Jar Path Override", lspJarPathField )
 		    .addLabeledComponent( "LSP BoxLang Version", lspBoxLangVersionField )
 		    .addLabeledComponent( "LSP BoxLang Home", lspBoxLangHomeField )
 		    .addLabeledComponent( "LSP Modules", lspModulesField )
@@ -105,6 +108,7 @@ public final class BoxLangSettingsForm {
 		    .addLabeledComponent( "LSP Max Heap (MB)", lspMaxHeapSizeSpinner )
 		    .addSeparator()
 		    .addLabeledComponent( "Debugger", debuggerStatusPanel )
+		    .addLabeledComponent( "Debugger Jar Path Override", debuggerJarPathField )
 		    .addSeparator()
 		    .addComponent( useBvmrcCheckBox )
 		    .addComponent( promptForDownloadsCheckBox )
@@ -138,7 +142,9 @@ public final class BoxLangSettingsForm {
 		lspBoxLangHomeField.setEnabled( enabled );
 		lspModulesField.setEnabled( enabled );
 		lspJvmArgsField.setEnabled( enabled );
+		lspJarPathField.setEnabled( enabled );
 		lspMaxHeapSizeSpinner.setEnabled( enabled );
+		debuggerJarPathField.setEnabled( enabled );
 		useBvmrcCheckBox.setEnabled( enabled );
 		promptForDownloadsCheckBox.setEnabled( enabled );
 	}
@@ -152,7 +158,9 @@ public final class BoxLangSettingsForm {
 		lspBoxLangHomeField.setText( nullToEmpty( state.lspBoxLangHome ) );
 		lspModulesField.setText( nullToEmpty( state.lspModules ) );
 		lspJvmArgsField.setText( nullToEmpty( state.lspJvmArgs ) );
+		lspJarPathField.setText( nullToEmpty( state.lspJarPath ) );
 		lspMaxHeapSizeSpinner.setValue( state.lspMaxHeapSize );
+		debuggerJarPathField.setText( nullToEmpty( state.debuggerJarPath ) );
 		useBvmrcCheckBox.setSelected( state.useBvmrc );
 		promptForDownloadsCheckBox.setSelected( state.promptForDownloads );
 	}
@@ -249,7 +257,9 @@ public final class BoxLangSettingsForm {
 		state.lspBoxLangHome		= emptyToNull( lspBoxLangHomeField.getText() );
 		state.lspModules			= emptyToNull( lspModulesField.getText() );
 		state.lspJvmArgs			= emptyToNull( lspJvmArgsField.getText() );
+		state.lspJarPath			= emptyToNull( lspJarPathField.getText() );
 		state.lspMaxHeapSize		= ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue();
+		state.debuggerJarPath		= emptyToNull( debuggerJarPathField.getText() );
 		state.useBvmrc				= useBvmrcCheckBox.isSelected();
 		state.promptForDownloads	= promptForDownloadsCheckBox.isSelected();
 	}
@@ -263,7 +273,9 @@ public final class BoxLangSettingsForm {
 		    || !Objects.equals( state.lspBoxLangHome, emptyToNull( lspBoxLangHomeField.getText() ) )
 		    || !Objects.equals( state.lspModules, emptyToNull( lspModulesField.getText() ) )
 		    || !Objects.equals( state.lspJvmArgs, emptyToNull( lspJvmArgsField.getText() ) )
+		    || !Objects.equals( state.lspJarPath, emptyToNull( lspJarPathField.getText() ) )
 		    || state.lspMaxHeapSize != ( ( Number ) lspMaxHeapSizeSpinner.getValue() ).intValue()
+		    || !Objects.equals( state.debuggerJarPath, emptyToNull( debuggerJarPathField.getText() ) )
 		    || state.useBvmrc != useBvmrcCheckBox.isSelected()
 		    || state.promptForDownloads != promptForDownloadsCheckBox.isSelected();
 	}
