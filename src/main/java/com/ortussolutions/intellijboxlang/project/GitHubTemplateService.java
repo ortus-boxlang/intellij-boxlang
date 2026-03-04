@@ -20,13 +20,15 @@ import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Service for fetching and caching BoxLang project templates from the GitHub boxlang-templates organization.
+ * Service for fetching and caching BoxLang project templates from the GitHub ortus-boxlang organization.
+ * Templates are repositories with names starting with "boxlang-starter".
  */
 public final class GitHubTemplateService {
 
 	private static final Logger						LOG					= Logger.getInstance( GitHubTemplateService.class );
-	private static final String						GITHUB_ORG			= "boxlang-templates";
-	private static final String						GITHUB_API_URL		= "https://api.github.com/orgs/" + GITHUB_ORG + "/repos";
+	private static final String						GITHUB_ORG			= "ortus-boxlang";
+	private static final String						TEMPLATE_PREFIX		= "boxlang-starter";
+	private static final String						GITHUB_API_URL		= "https://api.github.com/orgs/" + GITHUB_ORG + "/repos?per_page=100";
 	private static final String						CACHE_FILE_NAME		= "boxlang-templates-cache.json";
 	private static final Gson						GSON				= new GsonBuilder().create();
 	private static final Type						TEMPLATE_LIST_TYPE	= new TypeToken<List<GitHubTemplate>>() {
@@ -129,16 +131,21 @@ public final class GitHubTemplateService {
 
 	/**
 	 * Fetches the list of repositories from the GitHub API.
+	 * Filters for repositories with names starting with "boxlang-starter".
 	 */
 	private List<GitHubTemplate> fetchFromGitHub() throws IOException {
 		LOG.info( "Fetching templates from GitHub: " + GITHUB_API_URL );
 		try ( InputStream input = new URL( GITHUB_API_URL ).openStream() ) {
 			String					payload		= new String( input.readAllBytes(), StandardCharsets.UTF_8 );
-			List<GitHubTemplate>	templates	= GSON.fromJson( payload, TEMPLATE_LIST_TYPE );
-			if ( templates == null ) {
+			List<GitHubTemplate>	allRepos	= GSON.fromJson( payload, TEMPLATE_LIST_TYPE );
+			if ( allRepos == null ) {
 				return new ArrayList<>();
 			}
-			LOG.info( "Fetched " + templates.size() + " templates from GitHub" );
+			// Filter for repos starting with "boxlang-starter"
+			List<GitHubTemplate> templates = allRepos.stream()
+			    .filter( repo -> repo.getName() != null && repo.getName().startsWith( TEMPLATE_PREFIX ) )
+			    .collect( Collectors.toList() );
+			LOG.info( "Fetched " + templates.size() + " templates from GitHub (filtered from " + allRepos.size() + " repos)" );
 			return templates;
 		}
 	}
