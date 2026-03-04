@@ -48,22 +48,19 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
 		    .withDescription( "Select the working directory for the script" );
 		workingDirectoryField.addBrowseFolderListener( new TextBrowseFolderListener( workingDirDescriptor, project ) );
 
-		programArgumentsField = new RawCommandLineEditor();
-		programArgumentsField.setDialogCaption( "Program Arguments" );
+		programArgumentsField		= new RawCommandLineEditor();
 
-		environmentVariablesField = new RawCommandLineEditor();
-		environmentVariablesField.setDialogCaption( "Environment Variables" );
+		environmentVariablesField	= new RawCommandLineEditor();
 
-		boxLangHomeField = new TextFieldWithBrowseButton();
+		boxLangHomeField			= new TextFieldWithBrowseButton();
 		FileChooserDescriptor boxLangHomeDescriptor = FileChooserDescriptorFactory.createSingleFolderDescriptor()
 		    .withTitle( "Select BoxLang Home" )
 		    .withDescription( "Select the BoxLang home directory (leave empty to use default)" );
 		boxLangHomeField.addBrowseFolderListener( new TextBrowseFolderListener( boxLangHomeDescriptor, project ) );
 
-		jvmArgsField = new RawCommandLineEditor();
-		jvmArgsField.setDialogCaption( "JVM Arguments" );
+		jvmArgsField	= new RawCommandLineEditor();
 
-		panel = FormBuilder.createFormBuilder()
+		panel			= FormBuilder.createFormBuilder()
 		    .addComponent( useCurrentFileCheckbox )
 		    .addLabeledComponent( scriptPathLabel, scriptPathField, 1, false )
 		    .addLabeledComponent( new JBLabel( "Working directory:" ), workingDirectoryField, 1, false )

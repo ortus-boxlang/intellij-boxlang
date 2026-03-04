@@ -3,6 +3,7 @@ package com.ortussolutions.intellijboxlang.runtime;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.ortussolutions.intellijboxlang.settings.BoxLangStoragePaths;
 import java.io.IOException;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -18,7 +19,7 @@ public final class BoxLangRuntimeInstaller {
 			throw new IOException( "Missing BoxLang download URL for " + resolvedVersion );
 		}
 		String	filename	= resolvedVersion + ".jar";
-		URL		url			= new URL( downloadUrl );
+		URL		url			= URI.create( downloadUrl ).toURL();
 		Path	versionDir	= BoxLangStoragePaths.getRuntimeCacheRoot().resolve( resolvedVersion );
 		Files.createDirectories( versionDir );
 

@@ -230,7 +230,6 @@ public final class BoxLangLspClientService {
 
 	private InitializeParams createInitializeParams() {
 		InitializeParams params = new InitializeParams();
-		params.setRootUri( getProjectUri() );
 		params.setWorkspaceFolders( getWorkspaceFolders() );
 		params.setCapabilities( createClientCapabilities() );
 		params.setProcessId( ( int ) ProcessHandle.current().pid() );
@@ -327,14 +326,6 @@ public final class BoxLangLspClientService {
 		return args;
 	}
 
-	private String getProjectUri() {
-		String basePath = project.getBasePath();
-		if ( basePath == null ) {
-			return null;
-		}
-		return Path.of( basePath ).toUri().toString();
-	}
-
 	private List<WorkspaceFolder> getWorkspaceFolders() {
 		String basePath = project.getBasePath();
 		if ( basePath == null ) {
@@ -411,6 +402,11 @@ public final class BoxLangLspClientService {
 		return null;
 	}
 
+	/**
+	 * Maps LSP document symbols to a list of DocumentSymbol objects.
+	 * Handles both DocumentSymbol (preferred) and legacy SymbolInformation responses.
+	 */
+	@SuppressWarnings( "deprecation" )
 	private List<org.eclipse.lsp4j.DocumentSymbol> mapDocumentSymbols(
 	    List<org.eclipse.lsp4j.jsonrpc.messages.Either<org.eclipse.lsp4j.SymbolInformation, org.eclipse.lsp4j.DocumentSymbol>> result ) {
 		if ( result == null ) {

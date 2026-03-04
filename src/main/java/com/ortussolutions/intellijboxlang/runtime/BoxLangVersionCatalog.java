@@ -2,7 +2,7 @@ package com.ortussolutions.intellijboxlang.runtime;
 
 import java.io.IOException;
 import com.vdurmont.semver4j.Semver;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -71,7 +71,7 @@ public final class BoxLangVersionCatalog {
 
 	private static List<BoxLangVersionInfo> loadEntries() throws IOException {
 		try {
-			String						payload	= new String( new URL( LIST_URL ).openStream().readAllBytes(), StandardCharsets.UTF_8 );
+			String						payload	= new String( URI.create( LIST_URL ).toURL().openStream().readAllBytes(), StandardCharsets.UTF_8 );
 			List<BoxLangVersionInfo>	entries	= new ArrayList<>();
 			Matcher						matcher	= CONTENTS_PATTERN.matcher( payload );
 			while ( matcher.find() ) {

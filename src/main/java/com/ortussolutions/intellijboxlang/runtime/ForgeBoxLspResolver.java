@@ -2,7 +2,7 @@ package com.ortussolutions.intellijboxlang.runtime;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -43,7 +43,7 @@ public final class ForgeBoxLspResolver {
 	}
 
 	private static String fetchPayload() throws IOException {
-		try ( InputStream input = new URL( ENDPOINT ).openStream() ) {
+		try ( InputStream input = URI.create( ENDPOINT ).toURL().openStream() ) {
 			return new String( input.readAllBytes(), StandardCharsets.UTF_8 );
 		}
 	}

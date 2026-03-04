@@ -16,7 +16,7 @@ import com.ortussolutions.intellijboxlang.BoxLangIcons;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -186,7 +186,7 @@ public final class BoxLangModuleBuilder extends ModuleBuilder {
 
 		try {
 			// Download and extract ZIP
-			try ( InputStream in = new URL( zipUrl ).openStream();
+			try ( InputStream in = URI.create( zipUrl ).toURL().openStream();
 			    ZipInputStream zis = new ZipInputStream( in ) ) {
 
 				ZipEntry entry;

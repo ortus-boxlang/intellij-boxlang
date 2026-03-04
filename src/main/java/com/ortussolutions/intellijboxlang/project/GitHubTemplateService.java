@@ -8,7 +8,7 @@ import com.intellij.openapi.diagnostic.Logger;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Type;
-import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -135,7 +135,7 @@ public final class GitHubTemplateService {
 	 */
 	private List<GitHubTemplate> fetchFromGitHub() throws IOException {
 		LOG.info( "Fetching templates from GitHub: " + GITHUB_API_URL );
-		try ( InputStream input = new URL( GITHUB_API_URL ).openStream() ) {
+		try ( InputStream input = URI.create( GITHUB_API_URL ).toURL().openStream() ) {
 			String					payload		= new String( input.readAllBytes(), StandardCharsets.UTF_8 );
 			List<GitHubTemplate>	allRepos	= GSON.fromJson( payload, TEMPLATE_LIST_TYPE );
 			if ( allRepos == null ) {
