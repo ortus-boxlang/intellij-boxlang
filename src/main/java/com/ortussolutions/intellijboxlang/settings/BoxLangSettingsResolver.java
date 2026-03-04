@@ -7,6 +7,28 @@ public final class BoxLangSettingsResolver {
 	private BoxLangSettingsResolver() {
 	}
 
+	public static BoxLangResolvedSettings resolveGlobal() {
+		BoxLangSettingsState	appState	= BoxLangApplicationSettings.getInstance().getSettings();
+		BoxLangResolvedSettings	resolved	= new BoxLangResolvedSettings();
+
+		resolved.boxLangVersion		= appState.boxLangVersion;
+		resolved.boxLangJarPath		= appState.boxLangJarPath;
+		resolved.boxLangHome		= appState.boxLangHome;
+		resolved.javaHome			= appState.javaHome;
+		resolved.lspVersion			= appState.lspVersion;
+		resolved.lspBoxLangVersion	= appState.lspBoxLangVersion;
+		resolved.lspBoxLangHome		= appState.lspBoxLangHome;
+		resolved.lspModules			= appState.lspModules;
+		resolved.lspJvmArgs			= appState.lspJvmArgs;
+		resolved.lspMaxHeapSize		= appState.lspMaxHeapSize;
+		resolved.debuggerVersion	= appState.debuggerVersion;
+		resolved.debuggerJarPath	= appState.debuggerJarPath;
+		resolved.useBvmrc			= appState.useBvmrc;
+		resolved.promptForDownloads	= appState.promptForDownloads;
+
+		return resolved;
+	}
+
 	public static BoxLangResolvedSettings resolve( Project project ) {
 		BoxLangSettingsState		appState		= BoxLangApplicationSettings.getInstance().getSettings();
 		BoxLangProjectSettingsState	projectState	= BoxLangProjectSettings.getInstance( project ).getSettings();
