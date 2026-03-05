@@ -15,6 +15,7 @@ import com.intellij.xdebugger.XDebuggerUtil;
 import com.intellij.xdebugger.XSourcePosition;
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator;
 import com.intellij.xdebugger.frame.XCompositeNode;
+import com.intellij.xdebugger.frame.XNamedValue;
 import com.intellij.xdebugger.frame.XStackFrame;
 import com.intellij.xdebugger.frame.XValueChildrenList;
 import org.eclipse.lsp4j.debug.*;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -83,7 +85,8 @@ public class BoxLangStackFrame extends XStackFrame {
 
 	@Override
 	public void computeChildren( @NotNull XCompositeNode node ) {
-		// Fetch scopes for this frame, then fetch variables for each scope
+		// Fetch scopes for this frame and show them as top-level nodes.
+		// Each scope lazily loads its own variables when expanded.
 		BoxLangDapService dapService = debugProcess.getDapService();
 		if ( !dapService.isConnected() ) {
 			node.addChildren( XValueChildrenList.EMPTY, true );
@@ -98,9 +101,10 @@ public class BoxLangStackFrame extends XStackFrame {
 				    return;
 			    }
 
-			    Scope[] scopes = scopesResponse.getScopes();
-			    // Fetch variables for all scopes and add them as children
-			    fetchScopeVariables( node, dapService, scopes, 0 );
+			    node.addChildren(
+			        buildScopeChildren( scopesResponse.getScopes(), scope -> new BoxLangScopeValue( debugProcess, scope ) ),
+			        true
+			    );
 		    } )
 		    .exceptionally( ex -> {
 			    LOG.warn( "Failed to fetch scopes for frame " + dapFrame.getId(), ex );
@@ -109,51 +113,14 @@ public class BoxLangStackFrame extends XStackFrame {
 		    } );
 	}
 
-	/**
-	 * Recursively fetches variables for each scope and adds them to the node.
-	 * Scopes are processed sequentially so they appear in order in the UI.
-	 */
-	private void fetchScopeVariables( @NotNull XCompositeNode node,
-	    @NotNull BoxLangDapService dapService,
+	static @NotNull XValueChildrenList buildScopeChildren(
 	    @NotNull Scope[] scopes,
-	    int index ) {
-		if ( index >= scopes.length ) {
-			// All scopes processed - we're done
-			node.addChildren( XValueChildrenList.EMPTY, true );
-			return;
+	    @NotNull Function<Scope, XNamedValue> scopeFactory ) {
+		XValueChildrenList children = new XValueChildrenList( scopes.length );
+		for ( Scope scope : scopes ) {
+			children.add( scopeFactory.apply( scope ) );
 		}
-
-		Scope	scope		= scopes[ index ];
-		boolean	isLastScope	= ( index == scopes.length - 1 );
-
-		dapService.variables( scope.getVariablesReference() )
-		    .thenAccept( variablesResponse -> {
-			    XValueChildrenList children = new XValueChildrenList();
-
-			    if ( variablesResponse != null && variablesResponse.getVariables() != null ) {
-				    for ( Variable variable : variablesResponse.getVariables() ) {
-					    children.add( new BoxLangNamedValue( debugProcess, variable ) );
-				    }
-			    }
-
-			    // Add this scope's variables; isLast=true only for the final scope
-			    node.addChildren( children, isLastScope );
-
-			    if ( !isLastScope ) {
-				    // Fetch next scope
-				    fetchScopeVariables( node, dapService, scopes, index + 1 );
-			    }
-		    } )
-		    .exceptionally( ex -> {
-			    LOG.warn( "Failed to fetch variables for scope: " + scope.getName(), ex );
-			    // Still try to process remaining scopes
-			    if ( isLastScope ) {
-				    node.addChildren( XValueChildrenList.EMPTY, true );
-			    } else {
-				    fetchScopeVariables( node, dapService, scopes, index + 1 );
-			    }
-			    return null;
-		    } );
+		return children;
 	}
 
 	/**

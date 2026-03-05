@@ -36,7 +36,7 @@ public class BoxLangRunConfigurationEditor extends SettingsEditor<BoxLangRunConf
 
 		scriptPathLabel	= new JBLabel( "Script path:" );
 		scriptPathField	= new TextFieldWithBrowseButton();
-		FileChooserDescriptor scriptDescriptor = FileChooserDescriptorFactory.createSingleFileDescriptor()
+		FileChooserDescriptor scriptDescriptor = new FileChooserDescriptor( true, false, false, false, false, false )
 		    .withFileFilter( BoxLangFileUtil::isBoxLangFile )
 		    .withTitle( "Select BoxLang Script" )
 		    .withDescription( "Select the BoxLang script file to run" );

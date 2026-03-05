@@ -1,6 +1,7 @@
 package com.ortussolutions.intellijboxlang.runtime;
 
 import com.intellij.openapi.diagnostic.Logger;
+import com.ortussolutions.intellijboxlang.settings.BoxLangStoragePaths;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,7 +14,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * Locates BoxLang runtime JARs installed outside the IDE plugin cache — for example
- * via BVM ({@code ~/.bvm}) or a manual installation ({@code ~/.local/boxlang}).
+ * via BVM ({@code ~/.bvm}) or a manual installation ({@code ~/.boxlang}, {@code ~/.local/boxlang}).
  *
  * <p>
  * Probe order:
@@ -21,7 +22,8 @@ import org.jetbrains.annotations.Nullable;
  * <li>{@code ~/.bvm/current/lib/boxlang-*.jar} — the currently active BVM version</li>
  * <li>{@code ~/.bvm/versions/<version>/lib/boxlang-*.jar} — each installed BVM version,
  * most-recently-modified first</li>
- * <li>{@code ~/.local/boxlang/lib/boxlang-*.jar} — common manual install location</li>
+ * <li>{@code ~/.boxlang/lib/boxlang-*.jar} — global BoxLang home install (cross-platform)</li>
+ * <li>{@code ~/.local/boxlang/lib/boxlang-*.jar} — legacy manual install location</li>
  * </ol>
  *
  * <p>
@@ -75,7 +77,13 @@ public final class BoxLangSystemRuntimeLocator {
 			return bvmVersion;
 		}
 
-		// 3. ~/.local/boxlang
+		// 3. ~/.boxlang/lib (cross-platform global home)
+		SystemRuntimeInfo userBoxLangHomeInstall = findInDirectory( BoxLangStoragePaths.getUserBoxLangHome().resolve( "lib" ) );
+		if ( userBoxLangHomeInstall != null ) {
+			return userBoxLangHomeInstall;
+		}
+
+		// 4. ~/.local/boxlang/lib (legacy Unix location)
 		SystemRuntimeInfo localInstall = findInDirectory( Path.of( System.getProperty( "user.home" ), ".local", "boxlang", "lib" ) );
 		if ( localInstall != null ) {
 			return localInstall;
@@ -118,6 +126,11 @@ public final class BoxLangSystemRuntimeLocator {
 			} catch ( IOException e ) {
 				LOG.warn( "Failed to list BVM versions directory", e );
 			}
+		}
+
+		SystemRuntimeInfo userBoxLangHomeInstall = findInDirectory( BoxLangStoragePaths.getUserBoxLangHome().resolve( "lib" ) );
+		if ( userBoxLangHomeInstall != null && results.stream().noneMatch( r -> r.jarPath.equals( userBoxLangHomeInstall.jarPath ) ) ) {
+			results.add( userBoxLangHomeInstall );
 		}
 
 		SystemRuntimeInfo localInstall = findInDirectory( Path.of( System.getProperty( "user.home" ), ".local", "boxlang", "lib" ) );

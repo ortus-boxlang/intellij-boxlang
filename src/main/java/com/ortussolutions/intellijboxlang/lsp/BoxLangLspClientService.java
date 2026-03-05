@@ -50,6 +50,7 @@ import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageServer;
+import org.jetbrains.annotations.Nullable;
 
 @Service( Service.Level.PROJECT )
 public final class BoxLangLspClientService {
@@ -107,8 +108,11 @@ public final class BoxLangLspClientService {
 		if ( !semanticTokensSupported || legend == null ) {
 			return null;
 		}
-		String			uri		= toUri( file );
-		CachedTokens	cached	= tokenCache.get( uri );
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return null;
+		}
+		CachedTokens cached = tokenCache.get( uri );
 		if ( cached != null && cached.stamp == document.getModificationStamp() ) {
 			return cached.tokens;
 		}
@@ -177,8 +181,11 @@ public final class BoxLangLspClientService {
 		if ( !ensureStarted() ) {
 			return List.of();
 		}
-		String			uri		= toUri( file );
-		CachedSymbols	cached	= symbolCache.get( uri );
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return List.of();
+		}
+		CachedSymbols cached = symbolCache.get( uri );
 		if ( cached != null && cached.stamp == document.getModificationStamp() ) {
 			return cached.symbols;
 		}
@@ -211,7 +218,7 @@ public final class BoxLangLspClientService {
 			}
 			try {
 				startServer();
-				return true;
+				return server != null;
 			} catch ( Exception e ) {
 				LOG.warn( "Unable to start BoxLang LSP", e );
 				return false;
@@ -236,7 +243,9 @@ public final class BoxLangLspClientService {
 				try {
 					LOG.info( "Starting BoxLang LSP process" );
 					startServer();
-					LOG.info( "BoxLang LSP started" );
+					if ( server != null ) {
+						LOG.info( "BoxLang LSP started" );
+					}
 				} catch ( Exception e ) {
 					LOG.warn( "Unable to start BoxLang LSP", e );
 				} finally {
@@ -248,10 +257,14 @@ public final class BoxLangLspClientService {
 
 	private void startServer() throws Exception {
 		BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
-		LspBootstrapResult		bootstrap	= BoxLangLspBootstrapService.prepare( project );
-		int						port		= allocatePort();
+		LspBootstrapResult		bootstrap	= BoxLangLspBootstrapService.tryPrepareForLspClient( project );
+		if ( bootstrap == null ) {
+			// LSP is not available yet (prompt was shown if applicable); skip startup quietly.
+			return;
+		}
+		int					port		= allocatePort();
 
-		GeneralCommandLine		commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
+		GeneralCommandLine	commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
 		commandLine.withCharset( StandardCharsets.UTF_8 );
 		commandLine.withEnvironment( "BOXLANG_HOME", bootstrap.lspBoxLangHome.toString() );
 		commandLine.withEnvironment( "BOXLANG_MODULESDIRECTORY", bootstrap.lspModulePath.toString() );
@@ -392,8 +405,16 @@ public final class BoxLangLspClientService {
 		return List.of( new WorkspaceFolder( uri, project.getName() ) );
 	}
 
-	private String toUri( VirtualFile file ) {
-		return file.toNioPath().toUri().toString();
+	public static @Nullable String safeToUri( @Nullable VirtualFile file ) {
+		if ( file == null || !file.isInLocalFileSystem() ) {
+			return null;
+		}
+		try {
+			return file.toNioPath().toUri().toString();
+		} catch ( UnsupportedOperationException | IllegalArgumentException e ) {
+			LOG.debug( "Unable to map VirtualFile to NIO Path: " + file, e );
+			return null;
+		}
 	}
 
 	private boolean isBoxLangFile( VirtualFile file ) {
@@ -404,7 +425,10 @@ public final class BoxLangLspClientService {
 		if ( !ensureStarted() ) {
 			return List.of();
 		}
-		String uri = toUri( file );
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return List.of();
+		}
 		syncDocument( uri, document );
 		if ( diagnosticPullSupported ) {
 			List<org.eclipse.lsp4j.Diagnostic> pulled = pullDiagnostics( uri );
@@ -427,7 +451,10 @@ public final class BoxLangLspClientService {
 		if ( !ensureStarted() ) {
 			return;
 		}
-		String uri = toUri( file );
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return;
+		}
 		syncDocument( uri, document );
 		notifyDidSave( uri, document );
 	}

@@ -283,24 +283,46 @@ public class BoxLangDapService implements Disposable {
 			Path aliasRoot = resolveAliasRoot();
 			Files.createDirectories( aliasRoot );
 
-			String	parentHash	= Integer.toHexString( originalParent.toString().hashCode() );
-			Path	aliasDir	= aliasRoot.resolve( "dir-" + parentHash );
-			ensureDirectoryAlias( aliasDir, originalParent );
+			String	parentHash			= Integer.toHexString( originalParent.toString().hashCode() );
+			Path	aliasDir			= aliasRoot.resolve( "dir-" + parentHash );
+			Path	aliasedScriptPath	= aliasDir.resolve( originalPath.getFileName().toString() );
+			try {
+				ensureDirectoryAlias( aliasDir, originalParent );
+			} catch ( IOException symlinkError ) {
+				// Windows often disallows symlink creation without elevated privileges.
+				// Fall back to a direct file alias so debug launch can still proceed.
+				if ( !createFileAliasFallback( aliasDir, aliasedScriptPath, originalPath ) ) {
+					throw symlinkError;
+				}
+			}
 
-			Path	aliasedScriptPath		= aliasDir.resolve( originalPath.getFileName().toString() );
-			String	aliasedScriptPathString	= aliasedScriptPath.toString();
-			if ( containsWhitespace( aliasedScriptPathString ) ) {
+			String aliasedScriptPathString = aliasedScriptPath.toString();
+			if ( containsWhitespace( aliasedScriptPathString ) || !Files.exists( aliasedScriptPath ) ) {
 				return null;
 			}
-
-			if ( Files.exists( aliasedScriptPath ) ) {
-				return aliasedScriptPathString;
-			}
-
-			return null;
+			return aliasedScriptPathString;
 		} catch ( Exception e ) {
 			LOG.warn( "Unable to create whitespace-safe launch path alias for: " + scriptPath, e );
 			return null;
+		}
+	}
+
+	private static boolean createFileAliasFallback( @NotNull Path aliasDir, @NotNull Path aliasFile, @NotNull Path sourceFile ) {
+		try {
+			Files.createDirectories( aliasDir );
+			if ( Files.exists( aliasFile ) ) {
+				return true;
+			}
+			try {
+				Files.createLink( aliasFile, sourceFile );
+				return true;
+			} catch ( IOException linkError ) {
+				Files.copy( sourceFile, aliasFile );
+				return true;
+			}
+		} catch ( Exception e ) {
+			LOG.warn( "Unable to create file alias fallback for: " + sourceFile, e );
+			return false;
 		}
 	}
 
@@ -432,6 +454,21 @@ public class BoxLangDapService implements Disposable {
 	public CompletableFuture<VariablesResponse> variables( int variablesReference ) {
 		VariablesArguments args = new VariablesArguments();
 		args.setVariablesReference( variablesReference );
+		return call( server -> server.variables( args ) );
+	}
+
+	/**
+	 * Requests variables for a scope or variable reference using optional paging/filter arguments.
+	 */
+	public CompletableFuture<VariablesResponse> variables( int variablesReference,
+	    @Nullable VariablesArgumentsFilter filter,
+	    @Nullable Integer start,
+	    @Nullable Integer count ) {
+		VariablesArguments args = new VariablesArguments();
+		args.setVariablesReference( variablesReference );
+		args.setFilter( filter );
+		args.setStart( start );
+		args.setCount( count );
 		return call( server -> server.variables( args ) );
 	}
 

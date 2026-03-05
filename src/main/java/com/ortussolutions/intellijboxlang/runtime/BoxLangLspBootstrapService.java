@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangLspBootstrapService {
 
@@ -49,6 +50,20 @@ public final class BoxLangLspBootstrapService {
 			result.boxLangJarPath	= runtimeSelection.jarPath;
 			result.boxLangVersion	= runtimeSelection.resolvedVersion;
 			return result;
+		}
+	}
+
+	/**
+	 * Prepares LSP bootstrap data for editor/LSP-client startup.
+	 * Returns {@code null} when the LSP module is unavailable (after showing any
+	 * applicable download prompt) so callers can skip startup without surfacing errors.
+	 */
+	public static @Nullable LspBootstrapResult tryPrepareForLspClient( Project project ) throws IOException {
+		try {
+			return prepare( project );
+		} catch ( LspUnavailableException unavailable ) {
+			LOG.info( "Skipping LSP client startup: " + unavailable.getMessage() );
+			return null;
 		}
 	}
 
@@ -130,7 +145,7 @@ public final class BoxLangLspBootstrapService {
 			    } );
 		}
 
-		throw new IOException( "BoxLang LSP module is not installed." );
+		throw new LspUnavailableException( "BoxLang LSP module is not installed." );
 	}
 
 	private static Object getProjectLock( Project project ) {
@@ -187,5 +202,12 @@ public final class BoxLangLspBootstrapService {
 		}
 
 		protected abstract void runTask( @NotNull ProgressIndicator indicator ) throws IOException;
+	}
+
+	public static final class LspUnavailableException extends IOException {
+
+		public LspUnavailableException( String message ) {
+			super( message );
+		}
 	}
 }

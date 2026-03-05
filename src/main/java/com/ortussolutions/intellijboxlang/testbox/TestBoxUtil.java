@@ -1,6 +1,9 @@
 package com.ortussolutions.intellijboxlang.testbox;
 
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.SystemInfo;
+import com.intellij.openapi.util.io.FileUtil;
+import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiFile;
 import org.jetbrains.annotations.NotNull;
@@ -191,15 +194,9 @@ public final class TestBoxUtil {
 			return null;
 		}
 
-		String filePath = file.getPath();
-		if ( !filePath.startsWith( basePath ) ) {
+		String relative = relativizeToProjectBase( basePath, file.getPath() );
+		if ( relative == null ) {
 			return null;
-		}
-
-		// Get relative path and strip leading separator
-		String relative = filePath.substring( basePath.length() );
-		if ( relative.startsWith( "/" ) || relative.startsWith( "\\" ) ) {
-			relative = relative.substring( 1 );
 		}
 
 		// Remove the file extension
@@ -222,19 +219,42 @@ public final class TestBoxUtil {
 			return null;
 		}
 
-		if ( !directoryPath.startsWith( basePath ) ) {
+		String relative = relativizeToProjectBase( basePath, directoryPath );
+		if ( relative == null ) {
 			return null;
-		}
-
-		String relative = directoryPath.substring( basePath.length() );
-		if ( relative.startsWith( "/" ) || relative.startsWith( "\\" ) ) {
-			relative = relative.substring( 1 );
 		}
 		if ( relative.endsWith( "/" ) || relative.endsWith( "\\" ) ) {
 			relative = relative.substring( 0, relative.length() - 1 );
 		}
 
 		return relative.replace( '/', '.' ).replace( '\\', '.' );
+	}
+
+	static @Nullable String relativizeToProjectBase( @NotNull String basePath, @NotNull String path ) {
+		String	normalizedBase	= FileUtil.toSystemIndependentName( basePath );
+		String	normalizedPath	= FileUtil.toSystemIndependentName( path );
+
+		if ( normalizedBase.length() > 1 && normalizedBase.endsWith( "/" ) ) {
+			normalizedBase = normalizedBase.substring( 0, normalizedBase.length() - 1 );
+		}
+
+		boolean startsWithBase = SystemInfo.isWindows
+		    ? StringUtil.startsWithIgnoreCase( normalizedPath, normalizedBase )
+		    : normalizedPath.startsWith( normalizedBase );
+		if ( !startsWithBase ) {
+			return null;
+		}
+
+		if ( normalizedPath.length() > normalizedBase.length()
+		    && normalizedPath.charAt( normalizedBase.length() ) != '/' ) {
+			return null;
+		}
+
+		String relative = normalizedPath.substring( normalizedBase.length() );
+		if ( relative.startsWith( "/" ) ) {
+			relative = relative.substring( 1 );
+		}
+		return relative;
 	}
 
 	/**
