@@ -5,6 +5,9 @@ build/
 !**/src/test/**/build/
 
 ### IntelliJ IDEA ###
+.intellijPlatform/
+.idea/
+.run/
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
@@ -41,8 +44,13 @@ bin/
 ### Mac OS ###
 .DS_Store
 
-### Local signing/debug artifacts ###
+### Certificates and secrets ###
 *.pem
+*.key
+*.crt
+*.cert
 *.csr
 *.srl
+*.p12
+*.jks
 debug-webroot/

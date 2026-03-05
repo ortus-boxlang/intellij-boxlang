@@ -1,0 +1,24 @@
+<bx:output>
+<html>
+<head>
+    <title>BoxLang Debug Test</title>
+</head>
+<body>
+    <h1>BoxLang MiniServer Debug Mode</h1>
+    <p>Server Time: #now()#</p>
+    <p>BoxLang Version: #server.boxlang.version#</p>
+
+    <bx:set greeting = "Hello from BoxLang!">
+
+    <bx:set variables.test = new Test()/>
+    <p>#variables.test.getFoo()#</p>
+    <p>#variables.test.getBaz()#</p>
+
+    <bx:loop from="1" to="5" index="i">
+        <p>Loop iteration: #i#</p>
+    </bx:loop>
+
+    <p>#greeting#</p>
+</body>
+</html>
+</bx:output>

@@ -13,74 +13,75 @@ import javax.swing.Icon;
 
 public final class BoxLangColorSettingsPage implements ColorSettingsPage {
 
-    @Override
-    @NotNull
-    public String getDisplayName() {
-        return "BoxLang";
-    }
+	@Override
+	@NotNull
+	public String getDisplayName() {
+		return "BoxLang";
+	}
 
-    @Override
-    public Icon getIcon() {
-        return BoxLangIcons.FILE;
-    }
+	@Override
+	public Icon getIcon() {
+		return BoxLangIcons.FILE;
+	}
 
-    @Override
-    @NotNull
-    public SyntaxHighlighter getHighlighter() {
-        return new BoxLangSyntaxHighlighter();
-    }
+	@Override
+	@NotNull
+	public SyntaxHighlighter getHighlighter() {
+		return new BoxLangSyntaxHighlighter();
+	}
 
-    @Override
-    @NotNull
-    public String getDemoText() {
-        return """
-component {
-    function greet(name) {
-        // Say hello
-        if (name == "world") {
-            return "hello";
-        }
+	@Override
+	@NotNull
+	public String getDemoText() {
+		return """
+		       component {
+		           function greet(name) {
+		               // Say hello
+		               if (name == "world") {
+		                   return "hello";
+		               }
 
-        return "hi, #name#";
-    }
-}
+		               return "hi, #name#";
+		           }
+		       }
 
-<!--- template comment --->
-""".stripIndent();
-    }
+		       <!--- template comment --->
+		       """.stripIndent();
+	}
 
-    @Override
-    public Map<String, TextAttributesKey> getAdditionalHighlightingTagToDescriptorMap() {
-        return Map.of();
-    }
+	@Override
+	public Map<String, TextAttributesKey> getAdditionalHighlightingTagToDescriptorMap() {
+		return Map.of();
+	}
 
-    @Override
-    @NotNull
-    public AttributesDescriptor[] getAttributeDescriptors() {
-        return DESCRIPTORS;
-    }
+	@Override
+	@NotNull
+	public AttributesDescriptor[] getAttributeDescriptors() {
+		return DESCRIPTORS;
+	}
 
-    @Override
-    @NotNull
-    public ColorDescriptor[] getColorDescriptors() {
-        return ColorDescriptor.EMPTY_ARRAY;
-    }
+	@Override
+	@NotNull
+	public ColorDescriptor[] getColorDescriptors() {
+		return ColorDescriptor.EMPTY_ARRAY;
+	}
 
-    private static final AttributesDescriptor[] DESCRIPTORS = new AttributesDescriptor[] {
-        new AttributesDescriptor("Keyword", BoxLangTextAttributes.KEYWORD),
-        new AttributesDescriptor("Identifier", BoxLangTextAttributes.IDENTIFIER),
-        new AttributesDescriptor("Number", BoxLangTextAttributes.NUMBER),
-        new AttributesDescriptor("String", BoxLangTextAttributes.STRING),
-        new AttributesDescriptor("Line comment", BoxLangTextAttributes.LINE_COMMENT),
-        new AttributesDescriptor("Block comment", BoxLangTextAttributes.BLOCK_COMMENT),
-        new AttributesDescriptor("Operator", BoxLangTextAttributes.OPERATOR),
-        new AttributesDescriptor("HTML Tag", BoxLangTextAttributes.TAG),
-        new AttributesDescriptor("Brace", BoxLangTextAttributes.BRACE),
-        new AttributesDescriptor("Parenthesis", BoxLangTextAttributes.PAREN),
-        new AttributesDescriptor("Bracket", BoxLangTextAttributes.BRACKET),
-        new AttributesDescriptor("Comma", BoxLangTextAttributes.COMMA),
-        new AttributesDescriptor("Dot", BoxLangTextAttributes.DOT),
-        new AttributesDescriptor("Semicolon", BoxLangTextAttributes.SEMICOLON),
-        new AttributesDescriptor("Bad character", BoxLangTextAttributes.BAD_CHARACTER)
-    };
+	private static final AttributesDescriptor[] DESCRIPTORS = new AttributesDescriptor[] {
+	    new AttributesDescriptor( "Keyword", BoxLangTextAttributes.KEYWORD ),
+	    new AttributesDescriptor( "Identifier", BoxLangTextAttributes.IDENTIFIER ),
+	    new AttributesDescriptor( "Number", BoxLangTextAttributes.NUMBER ),
+	    new AttributesDescriptor( "String", BoxLangTextAttributes.STRING ),
+	    new AttributesDescriptor( "Interpolation delimiter (#)", BoxLangTextAttributes.HASH_SIGN ),
+	    new AttributesDescriptor( "Line comment", BoxLangTextAttributes.LINE_COMMENT ),
+	    new AttributesDescriptor( "Block comment", BoxLangTextAttributes.BLOCK_COMMENT ),
+	    new AttributesDescriptor( "Operator", BoxLangTextAttributes.OPERATOR ),
+	    new AttributesDescriptor( "HTML Tag", BoxLangTextAttributes.TAG ),
+	    new AttributesDescriptor( "Brace", BoxLangTextAttributes.BRACE ),
+	    new AttributesDescriptor( "Parenthesis", BoxLangTextAttributes.PAREN ),
+	    new AttributesDescriptor( "Bracket", BoxLangTextAttributes.BRACKET ),
+	    new AttributesDescriptor( "Comma", BoxLangTextAttributes.COMMA ),
+	    new AttributesDescriptor( "Dot", BoxLangTextAttributes.DOT ),
+	    new AttributesDescriptor( "Semicolon", BoxLangTextAttributes.SEMICOLON ),
+	    new AttributesDescriptor( "Bad character", BoxLangTextAttributes.BAD_CHARACTER )
+	};
 }

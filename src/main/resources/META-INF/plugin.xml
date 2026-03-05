@@ -12,7 +12,37 @@
 
   <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
        Guidelines: https://plugins.jetbrains.com/docs/marketplace/plugin-overview-page.html#plugin-description -->
-  <description>BoxLang IDE Plugin for IntelliJ IDEA providing Syntax Highlighting and LSP integration</description>
+  <description><![CDATA[
+    <p>The official IntelliJ IDEA plugin for <a href="https://boxlang.io">BoxLang</a>, a modern dynamic JVM language by Ortus Solutions.</p>
+
+    <h2>Features</h2>
+    <ul>
+      <li><strong>Syntax Highlighting</strong> - Full lexer-based highlighting for .bx, .bxm, .bxs, .cfc, and .cfm files with customizable color schemes</li>
+      <li><strong>LSP Integration</strong> - Semantic tokens, real-time diagnostics, and document symbols via Language Server Protocol</li>
+      <li><strong>Run Configurations</strong> - Execute BoxLang scripts directly with configurable arguments and environment</li>
+      <li><strong>Debugger</strong> - Full debugging support with breakpoints, stepping, variable inspection, watch expressions, and expression evaluation</li>
+      <li><strong>Structure View</strong> - Navigate code structure with document outline</li>
+      <li><strong>File Templates</strong> - Create new BoxLang Class, Script, and Template files</li>
+      <li><strong>Runtime Management</strong> - Automatic BoxLang runtime download and configuration</li>
+      <li><strong>TestBox Integration</strong> - Run and debug TestBox tests with gutter icons, test result tree, and filtering</li>
+    </ul>
+
+    <h2>Requirements</h2>
+    <ul>
+      <li>Java 21 or later</li>
+      <li>IntelliJ IDEA 2024.2 or later</li>
+    </ul>
+
+    <h2>Getting Started</h2>
+    <ol>
+      <li>Install the plugin and restart the IDE</li>
+      <li>Open or create a BoxLang project</li>
+      <li>Configure BoxLang settings in <strong>Settings → Languages &amp; Frameworks → BoxLang</strong></li>
+      <li>Create new files via <strong>New → BoxLang File</strong></li>
+    </ol>
+
+    <p>For documentation and support, visit <a href="https://boxlang.io">boxlang.io</a></p>
+  ]]></description>
 
   <!-- Product and plugin compatibility requirements.
        Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
@@ -26,14 +56,80 @@
     <fileType
       name="BoxLang"
       language="BoxLang"
-      extensions="bx;bxm;bxs"
+      extensions="bx;bxm;bxs;cfc;cfm"
       implementationClass="com.ortussolutions.intellijboxlang.file.BoxLangFileType" />
+
+    <lang.parserDefinition
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.parser.BoxLangParserDefinition" />
 
     <lang.syntaxHighlighterFactory
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.highlighting.BoxLangSyntaxHighlighterFactory" />
 
     <colorSettingsPage implementation="com.ortussolutions.intellijboxlang.highlighting.BoxLangColorSettingsPage" />
+
+    <annotator
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.lsp.BoxLangLspAnnotator" />
+
+    <lang.psiStructureViewFactory
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.structure.BoxLangStructureViewFactory" />
+
+    <lang.commenter
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.BoxLangCommenter" />
+
+    <!-- Global (application-level) BoxLang settings -->
+    <applicationConfigurable
+      id="boxlang.settings"
+      displayName="BoxLang"
+      groupId="language"
+      instance="com.ortussolutions.intellijboxlang.settings.BoxLangApplicationConfigurable" />
+
+    <!-- Per-project overrides, nested under the global BoxLang settings node -->
+    <projectConfigurable
+      id="boxlang.project.settings"
+      displayName="Project Overrides"
+      parentId="boxlang.settings"
+      instance="com.ortussolutions.intellijboxlang.settings.BoxLangProjectConfigurable" />
+
+    <!-- Run Configuration -->
+    <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangConfigurationType"/>
+    <configurationType implementation="com.ortussolutions.intellijboxlang.run.BoxLangAttachConfigurationType"/>
+    <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.run.BoxLangRunConfigurationProducer"/>
+    <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.run.BoxLangRunLineMarkerProvider"/>
+
+    <!-- Debug Support -->
+    <xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangAttachDebugRunner"/>
+
+    <!-- TestBox Test Runner -->
+    <configurationType implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxConfigurationType"/>
+    <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxRunConfigurationProducer"/>
+    <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.testbox.TestBoxRunLineMarkerProvider"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxDebugRunner"/>
+
+    <!-- TestBox Install Notifier -->
+    <postStartupActivity implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxInstallNotifier"/>
+
+    <!-- Project Generator -->
+    <directoryProjectGenerator implementation="com.ortussolutions.intellijboxlang.project.BoxLangProjectGenerator"/>
+
+    <!-- Module Type for IntelliJ IDEA New Project wizard -->
+    <moduleType id="BOXLANG_MODULE" implementationClass="com.ortussolutions.intellijboxlang.project.BoxLangModuleType"/>
+
+    <!-- Notifications -->
+    <notificationGroup id="BoxLang" displayType="BALLOON" />
+
+    <!-- Search Everywhere / Go to File / Class / Symbol -->
+    <gotoFileContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoFileContributor"/>
+    <gotoClassContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoClassContributor"/>
+    <gotoSymbolContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoSymbolContributor"/>
+    <searchEverywhereResultsEqualityProvider implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangSearchEqualityProvider"/>
+    <directoryIndexExcludePolicy implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangDirectoryIndexExcludePolicy"/>
 
   </extensions>
 

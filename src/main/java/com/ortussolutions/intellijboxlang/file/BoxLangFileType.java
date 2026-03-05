@@ -8,32 +8,33 @@ import org.jetbrains.annotations.NotNull;
 import javax.swing.Icon;
 
 public final class BoxLangFileType extends LanguageFileType {
-    public static final BoxLangFileType INSTANCE = new BoxLangFileType();
 
-    private BoxLangFileType() {
-        super(BoxLangLanguage.INSTANCE);
-    }
+	public static final BoxLangFileType INSTANCE = new BoxLangFileType();
 
-    @Override
-    @NotNull
-    public String getName() {
-        return "BoxLang";
-    }
+	private BoxLangFileType() {
+		super( BoxLangLanguage.INSTANCE );
+	}
 
-    @Override
-    @NotNull
-    public String getDescription() {
-        return "BoxLang source file";
-    }
+	@Override
+	@NotNull
+	public String getName() {
+		return "BoxLang";
+	}
 
-    @Override
-    @NotNull
-    public String getDefaultExtension() {
-        return "bx";
-    }
+	@Override
+	@NotNull
+	public String getDescription() {
+		return "BoxLang source file";
+	}
 
-    @Override
-    public Icon getIcon() {
-        return BoxLangIcons.FILE;
-    }
+	@Override
+	@NotNull
+	public String getDefaultExtension() {
+		return "bx";
+	}
+
+	@Override
+	public Icon getIcon() {
+		return BoxLangIcons.FILE;
+	}
 }

@@ -2,10 +2,11 @@ plugins {
   id("java")
   id("org.jetbrains.kotlin.jvm") version "1.9.25"
   id("org.jetbrains.intellij.platform") version "2.3.0"
+  id("com.diffplug.spotless") version "8.2.1"
 }
 
 group = "com.ortussolutions"
-version = "1.0-SNAPSHOT"
+version = "1.0.0"
 
 repositories {
   mavenCentral()
@@ -24,6 +25,11 @@ dependencies {
     // Add necessary plugin dependencies for compilation here, example:
     // bundledPlugin("com.intellij.java")
   }
+
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j:0.22.0")
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.jsonrpc:0.22.0")
+  implementation("org.eclipse.lsp4j:org.eclipse.lsp4j.debug:0.22.0")
+  implementation("com.vdurmont:semver4j:3.1.0")
 }
 
 intellijPlatform {
@@ -36,6 +42,54 @@ intellijPlatform {
       Initial version
     """.trimIndent()
   }
+
+  signing {
+    certificateChain.set(providers.environmentVariable("CERTIFICATE_CHAIN"))
+    privateKey.set(providers.environmentVariable("PRIVATE_KEY"))
+    password.set(providers.environmentVariable("PRIVATE_KEY_PASSWORD").orElse(""))
+  }
+
+  publishing {
+    token.set(providers.environmentVariable("PUBLISH_TOKEN"))
+    channels.set(listOf(providers.gradleProperty("pluginChannel").getOrElse("default")))
+  }
+
+  pluginVerification {
+    ides {
+      recommended()
+    }
+  }
+}
+
+spotless {
+  java {
+    val stagedSpotlessFiles = providers.gradleProperty("spotlessFiles").orNull
+      ?.split(",")
+      ?.map { it.trim() }
+      ?.filter { it.isNotEmpty() }
+      .orEmpty()
+
+    if (stagedSpotlessFiles.isNotEmpty()) {
+      target(stagedSpotlessFiles)
+    } else {
+      target(
+        fileTree(".") {
+          include("**/*.java")
+          exclude(
+            "**/build/**",
+            "bin/**",
+            "examples/**",
+            "src/main/java/ortus/boxlang/runtime/testing/**",
+            "src/main/gen/**",
+            "src/main/antlr/gen",
+            "modules/**"
+          )
+        }
+      )
+    }
+    eclipse().configFile("workbench/ortus-java-style.xml")
+    toggleOffOn()
+  }
 }
 
 tasks {
@@ -47,4 +101,8 @@ tasks {
   withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     kotlinOptions.jvmTarget = "21"
   }
+}
+
+tasks.named("check") {
+  dependsOn("spotlessCheck")
 }
