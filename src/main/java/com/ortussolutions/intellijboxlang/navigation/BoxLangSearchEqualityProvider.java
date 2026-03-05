@@ -1,5 +1,6 @@
 package com.ortussolutions.intellijboxlang.navigation;
 
+import com.intellij.ide.actions.searcheverywhere.PSIPresentationBgRendererWrapper;
 import com.intellij.ide.actions.searcheverywhere.SEResultsEqualityProvider;
 import com.intellij.ide.actions.searcheverywhere.SearchEverywhereFoundElementInfo;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -66,16 +67,31 @@ public class BoxLangSearchEqualityProvider implements SEResultsEqualityProvider 
 		return SEEqualElementsActionType.DoNothing.INSTANCE;
 	}
 
+	/**
+	 * Extracts a {@link VirtualFile} from a search result element.
+	 * <p>
+	 * Search Everywhere wraps elements in presentation wrappers
+	 * ({@link PSIPresentationBgRendererWrapper.ItemWithPresentation},
+	 * {@code PsiItemWithSimilarity}, etc.) before they reach the equality
+	 * provider. We must unwrap them using the platform's own
+	 * {@link PSIPresentationBgRendererWrapper#toPsi(Object)} to get the
+	 * underlying {@link PsiElement}, exactly as the built-in
+	 * {@code PsiElementsEqualityProvider} does.
+	 */
 	private static VirtualFile extractFile( SearchEverywhereFoundElementInfo info ) {
-		Object element = info.getElement();
-		if ( element instanceof PsiFile psiFile ) {
+		Object		element	= info.getElement();
+
+		// Unwrap presentation/similarity wrappers the same way the platform does
+		PsiElement	psi		= PSIPresentationBgRendererWrapper.toPsi( element );
+
+		if ( psi instanceof PsiFile psiFile ) {
 			return psiFile.getVirtualFile();
 		}
-		if ( element instanceof PsiFileSystemItem fsItem ) {
+		if ( psi instanceof PsiFileSystemItem fsItem ) {
 			return fsItem.getVirtualFile();
 		}
-		if ( element instanceof PsiElement psiElement ) {
-			PsiFile containingFile = psiElement.getContainingFile();
+		if ( psi != null ) {
+			PsiFile containingFile = psi.getContainingFile();
 			if ( containingFile != null ) {
 				return containingFile.getVirtualFile();
 			}
