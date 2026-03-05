@@ -10,6 +10,7 @@ import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
+import com.ortussolutions.intellijboxlang.testbox.TestBoxUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,6 +44,13 @@ public class BoxLangRunLineMarkerProvider extends RunLineMarkerContributor {
 
 		String fileName = file.getName();
 		if ( fileName == null ) {
+			return null;
+		}
+
+		// Defer to TestBoxRunLineMarkerProvider for test spec files
+		if ( file.getVirtualFile() != null
+		    && TestBoxUtil.isTestBoxSpecFile( file.getVirtualFile() )
+		    && TestBoxUtil.isTestBoxInstalled( file.getProject() ) ) {
 			return null;
 		}
 

@@ -24,6 +24,7 @@
       <li><strong>Structure View</strong> - Navigate code structure with document outline</li>
       <li><strong>File Templates</strong> - Create new BoxLang Class, Script, and Template files</li>
       <li><strong>Runtime Management</strong> - Automatic BoxLang runtime download and configuration</li>
+      <li><strong>TestBox Integration</strong> - Run and debug TestBox tests with gutter icons, test result tree, and filtering</li>
     </ul>
 
     <h2>Requirements</h2>
@@ -76,6 +77,10 @@
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.structure.BoxLangStructureViewFactory" />
 
+    <lang.commenter
+      language="BoxLang"
+      implementationClass="com.ortussolutions.intellijboxlang.BoxLangCommenter" />
+
     <!-- Global (application-level) BoxLang settings -->
     <applicationConfigurable
       id="boxlang.settings"
@@ -100,6 +105,15 @@
     <xdebugger.breakpointType implementation="com.ortussolutions.intellijboxlang.debug.BoxLangLineBreakpointType"/>
     <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangDebugRunner"/>
     <programRunner implementation="com.ortussolutions.intellijboxlang.debug.BoxLangAttachDebugRunner"/>
+
+    <!-- TestBox Test Runner -->
+    <configurationType implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxConfigurationType"/>
+    <runConfigurationProducer implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxRunConfigurationProducer"/>
+    <runLineMarkerContributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.testbox.TestBoxRunLineMarkerProvider"/>
+    <programRunner implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxDebugRunner"/>
+
+    <!-- TestBox Install Notifier -->
+    <postStartupActivity implementation="com.ortussolutions.intellijboxlang.testbox.TestBoxInstallNotifier"/>
 
     <!-- Project Generator -->
     <directoryProjectGenerator implementation="com.ortussolutions.intellijboxlang.project.BoxLangProjectGenerator"/>

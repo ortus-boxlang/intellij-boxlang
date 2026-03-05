@@ -9,6 +9,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
+import com.ortussolutions.intellijboxlang.testbox.TestBoxUtil;
 import org.jetbrains.annotations.NotNull;
 
 /**
@@ -63,6 +64,7 @@ public class BoxLangRunConfigurationProducer extends LazyRunConfigurationProduce
 
 	/**
 	 * Gets the BoxLang file from the context, or null if not applicable.
+	 * Returns null for TestBox spec files so the TestBox producer handles them instead.
 	 */
 	private VirtualFile getBoxLangFile( ConfigurationContext context ) {
 		PsiElement element = context.getPsiLocation();
@@ -80,6 +82,15 @@ public class BoxLangRunConfigurationProducer extends LazyRunConfigurationProduce
 			return null;
 		}
 
-		return BoxLangFileUtil.isBoxLangFile( file ) ? file : null;
+		if ( !BoxLangFileUtil.isBoxLangFile( file ) ) {
+			return null;
+		}
+
+		// Defer to TestBox producer for test spec files
+		if ( TestBoxUtil.isTestBoxSpecFile( file ) && TestBoxUtil.isTestBoxInstalled( context.getProject() ) ) {
+			return null;
+		}
+
+		return file;
 	}
 }
