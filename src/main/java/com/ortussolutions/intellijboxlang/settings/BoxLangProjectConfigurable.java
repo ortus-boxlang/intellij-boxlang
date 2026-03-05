@@ -538,7 +538,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 				Path	modulePath	= Path.of( status.path );
 				String	displayPath	= modulePath.toString();
 				String	shortened	= shortenPath( displayPath, 50 );
-				pathLink.setHyperlinkText( "at ", shortened, "" );
+				pathLink.setHyperlinkText( "at " + shortened );
 				pathLink.setToolTipText( displayPath );
 				if ( isLsp ) {
 					lspInstalledPath = modulePath;
@@ -766,7 +766,7 @@ public final class BoxLangProjectConfigurable implements Configurable {
 				Path	modulePath	= Path.of( status.path );
 				String	displayPath	= modulePath.toString();
 				String	shortened	= shortenPath( displayPath, 50 );
-				pathLink.setHyperlinkText( "at ", shortened, "" );
+				pathLink.setHyperlinkText( "at " + shortened );
 				pathLink.setToolTipText( displayPath );
 				pathSetter.accept( modulePath );
 				pathLink.setVisible( true );

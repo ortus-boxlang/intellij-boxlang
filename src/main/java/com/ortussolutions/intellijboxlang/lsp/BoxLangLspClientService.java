@@ -18,6 +18,7 @@ import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
 import com.ortussolutions.intellijboxlang.settings.BoxLangSettingsResolver;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -127,7 +128,7 @@ public final class BoxLangLspClientService {
 	}
 
 	@SuppressWarnings( "deprecation" )
-	public List<org.eclipse.lsp4j.SymbolInformation> requestWorkspaceSymbols( String query ) {
+	public List<org.eclipse.lsp4j.WorkspaceSymbol> requestWorkspaceSymbols( String query ) {
 		if ( !ensureStarted() ) {
 			return List.of();
 		}
@@ -144,22 +145,16 @@ public final class BoxLangLspClientService {
 				LOG.debug( "LSP workspace/symbol returned null result for query='" + query + "'" );
 				return List.of();
 			}
-			List<org.eclipse.lsp4j.SymbolInformation> symbols = new ArrayList<>();
+			List<org.eclipse.lsp4j.WorkspaceSymbol> symbols = new ArrayList<>();
 			if ( result.isLeft() ) {
-				for ( org.eclipse.lsp4j.SymbolInformation info : result.getLeft() ) {
-					symbols.add( info );
+				for ( org.eclipse.lsp4j.SymbolInformation legacy : result.getLeft() ) {
+					org.eclipse.lsp4j.WorkspaceSymbol mapped = toWorkspaceSymbol( legacy );
+					if ( mapped != null ) {
+						symbols.add( mapped );
+					}
 				}
 			} else if ( result.isRight() ) {
-				for ( org.eclipse.lsp4j.WorkspaceSymbol ws : result.getRight() ) {
-					org.eclipse.lsp4j.SymbolInformation info = new org.eclipse.lsp4j.SymbolInformation();
-					info.setName( ws.getName() );
-					info.setKind( ws.getKind() );
-					info.setContainerName( ws.getContainerName() );
-					if ( ws.getLocation().isLeft() ) {
-						info.setLocation( ws.getLocation().getLeft() );
-					}
-					symbols.add( info );
-				}
+				symbols.addAll( result.getRight() );
 			}
 			logWorkspaceSymbolsResponse( query, result, symbols );
 			return symbols;
@@ -468,7 +463,7 @@ public final class BoxLangLspClientService {
 	private void logWorkspaceSymbolsResponse(
 	    String query,
 	    Either<List<? extends org.eclipse.lsp4j.SymbolInformation>, List<? extends org.eclipse.lsp4j.WorkspaceSymbol>> result,
-	    List<org.eclipse.lsp4j.SymbolInformation> symbols ) {
+	    List<org.eclipse.lsp4j.WorkspaceSymbol> symbols ) {
 		int		rawCount	= result.isLeft() ? result.getLeft().size() : result.getRight().size();
 		String	variant		= result.isLeft() ? "SymbolInformation[]" : "WorkspaceSymbol[]";
 		LOG.debug(
@@ -526,17 +521,69 @@ public final class BoxLangLspClientService {
 				symbols.add( entry.getRight() );
 				continue;
 			}
-			org.eclipse.lsp4j.SymbolInformation	info	= entry.getLeft();
-			org.eclipse.lsp4j.DocumentSymbol	symbol	= new org.eclipse.lsp4j.DocumentSymbol();
-			symbol.setName( info.getName() );
-			symbol.setKind( info.getKind() );
-			if ( info.getLocation() != null ) {
-				symbol.setRange( info.getLocation().getRange() );
-				symbol.setSelectionRange( info.getLocation().getRange() );
+			org.eclipse.lsp4j.DocumentSymbol symbol = toDocumentSymbol( entry.getLeft() );
+			if ( symbol != null ) {
+				symbols.add( symbol );
 			}
-			symbols.add( symbol );
 		}
 		return symbols;
+	}
+
+	private org.eclipse.lsp4j.WorkspaceSymbol toWorkspaceSymbol( Object legacySymbol ) {
+		String name = readField( legacySymbol, "name", String.class );
+		if ( name == null || name.isBlank() ) {
+			return null;
+		}
+		org.eclipse.lsp4j.SymbolKind		kind			= readField( legacySymbol, "kind", org.eclipse.lsp4j.SymbolKind.class );
+		String								containerName	= readField( legacySymbol, "containerName", String.class );
+		org.eclipse.lsp4j.Location			location		= readField( legacySymbol, "location", org.eclipse.lsp4j.Location.class );
+
+		org.eclipse.lsp4j.WorkspaceSymbol	symbol			= new org.eclipse.lsp4j.WorkspaceSymbol();
+		symbol.setName( name );
+		symbol.setKind( kind );
+		symbol.setContainerName( containerName );
+		if ( location != null ) {
+			symbol.setLocation( Either.forLeft( location ) );
+		}
+		return symbol;
+	}
+
+	private org.eclipse.lsp4j.DocumentSymbol toDocumentSymbol( Object legacySymbol ) {
+		String name = readField( legacySymbol, "name", String.class );
+		if ( name == null || name.isBlank() ) {
+			return null;
+		}
+
+		org.eclipse.lsp4j.DocumentSymbol symbol = new org.eclipse.lsp4j.DocumentSymbol();
+		symbol.setName( name );
+		symbol.setKind( readField( legacySymbol, "kind", org.eclipse.lsp4j.SymbolKind.class ) );
+
+		org.eclipse.lsp4j.Location location = readField( legacySymbol, "location", org.eclipse.lsp4j.Location.class );
+		if ( location != null && location.getRange() != null ) {
+			symbol.setRange( location.getRange() );
+			symbol.setSelectionRange( location.getRange() );
+		}
+		return symbol;
+	}
+
+	private static <T> T readField( Object source, String fieldName, Class<T> type ) {
+		if ( source == null ) {
+			return null;
+		}
+		Class<?> current = source.getClass();
+		while ( current != null ) {
+			try {
+				Field field = current.getDeclaredField( fieldName );
+				field.setAccessible( true );
+				Object value = field.get( source );
+				return type.isInstance( value ) ? type.cast( value ) : null;
+			} catch ( NoSuchFieldException e ) {
+				current = current.getSuperclass();
+			} catch ( IllegalAccessException e ) {
+				return null;
+			}
+		}
+		return null;
 	}
 
 	private record CachedTokens( long stamp, SemanticTokens tokens ) {
