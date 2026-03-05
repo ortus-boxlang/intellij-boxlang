@@ -124,6 +124,13 @@
     <!-- Notifications -->
     <notificationGroup id="BoxLang" displayType="BALLOON" />
 
+    <!-- Search Everywhere / Go to File / Class / Symbol -->
+    <gotoFileContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoFileContributor"/>
+    <gotoClassContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoClassContributor"/>
+    <gotoSymbolContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoSymbolContributor"/>
+    <searchEverywhereResultsEqualityProvider implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangSearchEqualityProvider"/>
+    <directoryIndexExcludePolicy implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangDirectoryIndexExcludePolicy"/>
+
   </extensions>
 
   <actions>

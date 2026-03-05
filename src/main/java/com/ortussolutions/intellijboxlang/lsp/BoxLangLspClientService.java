@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.eclipse.lsp4j.ClientCapabilities;
@@ -45,26 +46,30 @@ import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.WorkspaceFolder;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
+import org.eclipse.lsp4j.jsonrpc.ResponseErrorException;
 import org.eclipse.lsp4j.launch.LSPLauncher;
 import org.eclipse.lsp4j.services.LanguageServer;
 
 @Service( Service.Level.PROJECT )
 public final class BoxLangLspClientService {
 
-	private static final Logger										LOG						= Logger.getInstance( BoxLangLspClientService.class );
-	private static final int										CONNECT_TIMEOUT_MS		= 10000;
-	private static final int										REQUEST_TIMEOUT_MS		= 5000;
-	private static final int										INITIALIZE_TIMEOUT_MS	= 20000;
+	private static final Logger										LOG								= Logger.getInstance( BoxLangLspClientService.class );
+	private static final int										CONNECT_TIMEOUT_MS				= 10000;
+	private static final int										REQUEST_TIMEOUT_MS				= 5000;
+	private static final int										INITIALIZE_TIMEOUT_MS			= 20000;
 
 	private final Project											project;
-	private final Map<String, Integer>								documentVersions		= new ConcurrentHashMap<>();
-	private final Map<String, Long>									documentStamps			= new ConcurrentHashMap<>();
-	private final Map<String, CachedTokens>							tokenCache				= new ConcurrentHashMap<>();
-	private final Map<String, CachedSymbols>						symbolCache				= new ConcurrentHashMap<>();
-	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics				= new ConcurrentHashMap<>();
-	private final java.util.concurrent.atomic.AtomicBoolean			starting				= new java.util.concurrent.atomic.AtomicBoolean( false );
-	private final Object											startLock				= new Object();
-	private boolean													diagnosticPullSupported	= false;
+	private final Map<String, Integer>								documentVersions				= new ConcurrentHashMap<>();
+	private final Map<String, Long>									documentStamps					= new ConcurrentHashMap<>();
+	private final Map<String, CachedTokens>							tokenCache						= new ConcurrentHashMap<>();
+	private final Map<String, CachedSymbols>						symbolCache						= new ConcurrentHashMap<>();
+	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics						= new ConcurrentHashMap<>();
+	private final java.util.concurrent.atomic.AtomicBoolean			starting						= new java.util.concurrent.atomic.AtomicBoolean( false );
+	private final Object											startLock						= new Object();
+	private boolean													diagnosticPullSupported			= false;
+	private boolean													semanticTokensSupported			= false;
+	private boolean													workspaceSymbolsSupported		= false;
+	private boolean													workspaceSymbolsDisabledLogged	= false;
 
 	private Process													process;
 	private Socket													socket;
@@ -98,6 +103,9 @@ public final class BoxLangLspClientService {
 		if ( !ensureStarted() ) {
 			return null;
 		}
+		if ( !semanticTokensSupported || legend == null ) {
+			return null;
+		}
 		String			uri		= toUri( file );
 		CachedTokens	cached	= tokenCache.get( uri );
 		if ( cached != null && cached.stamp == document.getModificationStamp() ) {
@@ -113,8 +121,60 @@ public final class BoxLangLspClientService {
 			}
 			return tokens;
 		} catch ( Exception e ) {
-			LOG.debug( "Failed to request semantic tokens", e );
+			logLspRequestFailure( "textDocument/semanticTokens/full", "uri='" + uri + "'", e );
 			return null;
+		}
+	}
+
+	@SuppressWarnings( "deprecation" )
+	public List<org.eclipse.lsp4j.SymbolInformation> requestWorkspaceSymbols( String query ) {
+		if ( !ensureStarted() ) {
+			return List.of();
+		}
+		if ( !workspaceSymbolsSupported ) {
+			return List.of();
+		}
+		org.eclipse.lsp4j.WorkspaceSymbolParams params = new org.eclipse.lsp4j.WorkspaceSymbolParams( query );
+		try {
+			var																												future	= server
+			    .getWorkspaceService().symbol( params );
+			Either<List<? extends org.eclipse.lsp4j.SymbolInformation>, List<? extends org.eclipse.lsp4j.WorkspaceSymbol>>	result	= future
+			    .get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
+			if ( result == null ) {
+				LOG.debug( "LSP workspace/symbol returned null result for query='" + query + "'" );
+				return List.of();
+			}
+			List<org.eclipse.lsp4j.SymbolInformation> symbols = new ArrayList<>();
+			if ( result.isLeft() ) {
+				for ( org.eclipse.lsp4j.SymbolInformation info : result.getLeft() ) {
+					symbols.add( info );
+				}
+			} else if ( result.isRight() ) {
+				for ( org.eclipse.lsp4j.WorkspaceSymbol ws : result.getRight() ) {
+					org.eclipse.lsp4j.SymbolInformation info = new org.eclipse.lsp4j.SymbolInformation();
+					info.setName( ws.getName() );
+					info.setKind( ws.getKind() );
+					info.setContainerName( ws.getContainerName() );
+					if ( ws.getLocation().isLeft() ) {
+						info.setLocation( ws.getLocation().getLeft() );
+					}
+					symbols.add( info );
+				}
+			}
+			logWorkspaceSymbolsResponse( query, result, symbols );
+			return symbols;
+		} catch ( Exception e ) {
+			if ( isUnsupportedWorkspaceSymbolError( e ) ) {
+				workspaceSymbolsSupported = false;
+				if ( !workspaceSymbolsDisabledLogged ) {
+					workspaceSymbolsDisabledLogged = true;
+					LOG.warn(
+					    "LSP workspace/symbol appears unsupported by the running server instance; disabling symbol requests for this session."
+					);
+				}
+			}
+			logLspRequestFailure( "workspace/symbol", "query='" + query + "'", e );
+			return List.of();
 		}
 	}
 
@@ -220,10 +280,12 @@ public final class BoxLangLspClientService {
 
 		InitializeResult result = server.initialize( createInitializeParams() )
 		    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
-		legend					= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
+		legend						= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
 		    ? result.getCapabilities().getSemanticTokensProvider().getLegend()
 		    : null;
-		diagnosticPullSupported	= result.getCapabilities() != null
+		semanticTokensSupported		= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null;
+		workspaceSymbolsSupported	= result.getCapabilities() != null && result.getCapabilities().getWorkspaceSymbolProvider() != null;
+		diagnosticPullSupported		= result.getCapabilities() != null
 		    && result.getCapabilities().getDiagnosticProvider() != null;
 		server.initialized( new InitializedParams() );
 	}
@@ -400,6 +462,52 @@ public final class BoxLangLspClientService {
 			LOG.debug( "Failed to pull diagnostics", e );
 		}
 		return null;
+	}
+
+	@SuppressWarnings( "deprecation" )
+	private void logWorkspaceSymbolsResponse(
+	    String query,
+	    Either<List<? extends org.eclipse.lsp4j.SymbolInformation>, List<? extends org.eclipse.lsp4j.WorkspaceSymbol>> result,
+	    List<org.eclipse.lsp4j.SymbolInformation> symbols ) {
+		int		rawCount	= result.isLeft() ? result.getLeft().size() : result.getRight().size();
+		String	variant		= result.isLeft() ? "SymbolInformation[]" : "WorkspaceSymbol[]";
+		LOG.debug(
+		    "LSP workspace/symbol query='" + query + "' variant=" + variant + ", rawCount=" + rawCount + ", mappedCount="
+		        + symbols.size()
+		);
+	}
+
+	private void logLspRequestFailure( String method, String context, Exception e ) {
+		Throwable cause = e;
+		if ( e instanceof ExecutionException exec && exec.getCause() != null ) {
+			cause = exec.getCause();
+		}
+		if ( cause instanceof ResponseErrorException responseErrorException && responseErrorException.getResponseError() != null ) {
+			var responseError = responseErrorException.getResponseError();
+			LOG.warn(
+			    "LSP " + method + " failed " + context + " code=" + responseError.getCode() + ", message='"
+			        + responseError.getMessage() + "', data=" + responseError.getData()
+			);
+			LOG.debug( "LSP " + method + " exception details", e );
+			return;
+		}
+		LOG.debug( "Failed to request " + method + " " + context, e );
+	}
+
+	private boolean isUnsupportedWorkspaceSymbolError( Exception e ) {
+		Throwable cause = e;
+		if ( e instanceof ExecutionException exec && exec.getCause() != null ) {
+			cause = exec.getCause();
+		}
+		if ( ! ( cause instanceof ResponseErrorException responseErrorException ) || responseErrorException.getResponseError() == null ) {
+			return false;
+		}
+		Object data = responseErrorException.getResponseError().getData();
+		if ( data == null ) {
+			return false;
+		}
+		String dataText = String.valueOf( data );
+		return dataText.contains( "UnsupportedOperationException" ) && dataText.contains( "WorkspaceService.symbol" );
 	}
 
 	/**

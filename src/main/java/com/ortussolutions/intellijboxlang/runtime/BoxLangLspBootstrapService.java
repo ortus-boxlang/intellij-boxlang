@@ -75,9 +75,24 @@ public final class BoxLangLspBootstrapService {
 			}
 		}
 
+		// 1. Prefer project-local module install when available
+		Path projectHome = BoxLangStoragePaths.getProjectBoxLangHome( project );
+		if ( projectHome != null ) {
+			Path	projectModulePath	= projectHome.resolve( "modules" ).resolve( "bx-lsp" );
+			Path	projectBoxJson		= LspModuleResolver.findBoxJson( projectModulePath );
+			if ( projectBoxJson != null ) {
+				LspModuleInfo info = new LspModuleInfo();
+				info.modulePath		= projectModulePath;
+				info.boxJsonPath	= projectBoxJson;
+				info.needsDownload	= false;
+				LOG.info( "Using project-local LSP module at " + projectModulePath );
+				return info;
+			}
+		}
+
 		String lspVersion = settings.lspVersion;
 
-		// 1. If a specific version is configured, check if it's installed
+		// 2. If a specific version is configured, check if it's installed
 		if ( lspVersion != null && !lspVersion.isBlank() ) {
 			LspModuleInfo info = LspModuleResolver.resolveForVersion( lspVersion );
 			if ( !info.needsDownload ) {
@@ -85,16 +100,17 @@ public final class BoxLangLspBootstrapService {
 			}
 		}
 
-		// 2. No specific version configured (or not installed) - try any installed version
+		// 3. No specific version configured (or not installed) - try any installed version
 		if ( lspVersion == null || lspVersion.isBlank() ) {
 			LspModuleInfo anyInstalled = LspModuleResolver.findAnyInstalledVersion();
 			if ( anyInstalled != null && !anyInstalled.needsDownload ) {
-				LOG.info( "Using installed LSP version: " + anyInstalled.requestedVersion );
+				String resolvedVersion = ModuleVersionReader.readVersion( anyInstalled.boxJsonPath );
+				LOG.info( "Using installed LSP version: " + ( resolvedVersion != null ? resolvedVersion : anyInstalled.requestedVersion ) );
 				return anyInstalled;
 			}
 		}
 
-		// 3. Nothing usable installed - show notification only if no explicit version is configured
+		// 4. Nothing usable installed - show notification only if no explicit version is configured
 		// (if the user has a version set but it's not installed, that's a misconfiguration - don't auto-prompt)
 		boolean hasExplicitConfig = ( lspVersion != null && !lspVersion.isBlank() )
 		    || ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() );
