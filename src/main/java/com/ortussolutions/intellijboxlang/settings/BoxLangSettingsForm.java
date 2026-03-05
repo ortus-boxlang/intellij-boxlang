@@ -340,7 +340,7 @@ public final class BoxLangSettingsForm {
 		String	displayPath		= parentDir != null ? parentDir.toString() : path;
 		String	shortenedPath	= shortenPath( displayPath, 50 );
 
-		link.setHyperlinkText( "at ", shortenedPath, "" );
+		link.setHyperlinkText( "at " + shortenedPath );
 		link.setToolTipText( displayPath );
 
 		Path installedPath = parentDir != null ? parentDir : fullPath;

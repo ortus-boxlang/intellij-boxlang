@@ -12,8 +12,11 @@ import com.intellij.psi.PsiDocumentManager;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
 import org.eclipse.lsp4j.Location;
-import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.WorkspaceSymbol;
+import org.eclipse.lsp4j.WorkspaceSymbolLocation;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,16 +25,15 @@ import java.net.URI;
 import java.nio.file.Path;
 
 /**
- * Wraps an LSP {@link SymbolInformation} as an IntelliJ {@link NavigationItem}
+ * Wraps an LSP {@link WorkspaceSymbol} as an IntelliJ {@link NavigationItem}
  * so it can appear in Search Everywhere and Go to Symbol results.
  */
-@SuppressWarnings( "deprecation" )
 public class BoxLangSymbolNavigationItem implements NavigationItem {
 
 	private final Project			project;
-	private final SymbolInformation	symbol;
+	private final WorkspaceSymbol	symbol;
 
-	public BoxLangSymbolNavigationItem( @NotNull Project project, @NotNull SymbolInformation symbol ) {
+	public BoxLangSymbolNavigationItem( @NotNull Project project, @NotNull WorkspaceSymbol symbol ) {
 		this.project	= project;
 		this.symbol		= symbol;
 	}
@@ -43,13 +45,14 @@ public class BoxLangSymbolNavigationItem implements NavigationItem {
 		StringBuilder key = new StringBuilder();
 		key.append( symbol.getName() ).append( "|" );
 		key.append( symbol.getKind() ).append( "|" );
-		Location location = symbol.getLocation();
-		if ( location != null ) {
-			key.append( location.getUri() ).append( "|" );
-			if ( location.getRange() != null && location.getRange().getStart() != null ) {
-				key.append( location.getRange().getStart().getLine() )
+		String uri = symbolUri();
+		if ( uri != null ) {
+			key.append( uri ).append( "|" );
+			Range range = symbolRange();
+			if ( range != null && range.getStart() != null ) {
+				key.append( range.getStart().getLine() )
 				    .append( ":" )
-				    .append( location.getRange().getStart().getCharacter() );
+				    .append( range.getStart().getCharacter() );
 			}
 		}
 		return key.toString();
@@ -76,12 +79,12 @@ public class BoxLangSymbolNavigationItem implements NavigationItem {
 
 			@Override
 			public @Nullable String getLocationString() {
-				Location location = symbol.getLocation();
-				if ( location == null ) {
+				String uri = symbolUri();
+				if ( uri == null ) {
 					return symbol.getContainerName();
 				}
 				try {
-					String	path	= Path.of( new URI( location.getUri() ) ).toString();
+					String	path	= Path.of( new URI( uri ) ).toString();
 					String	base	= project.getBasePath();
 					if ( base != null && path.startsWith( base ) ) {
 						path = path.substring( base.length() + 1 );
@@ -99,12 +102,12 @@ public class BoxLangSymbolNavigationItem implements NavigationItem {
 
 	@Override
 	public void navigate( boolean requestFocus ) {
-		Location location = symbol.getLocation();
-		if ( location == null ) {
+		String uri = symbolUri();
+		if ( uri == null ) {
 			return;
 		}
 		try {
-			Path		filePath	= Path.of( new URI( location.getUri() ) );
+			Path		filePath	= Path.of( new URI( uri ) );
 			VirtualFile	vf			= LocalFileSystem.getInstance().findFileByNioFile( filePath );
 			if ( vf == null ) {
 				return;
@@ -117,12 +120,15 @@ public class BoxLangSymbolNavigationItem implements NavigationItem {
 			if ( document == null ) {
 				return;
 			}
-			int	line		= location.getRange().getStart().getLine();
-			int	character	= location.getRange().getStart().getCharacter();
-			if ( line >= document.getLineCount() ) {
-				return;
+			Range	range		= symbolRange();
+			int		line		= range != null && range.getStart() != null ? range.getStart().getLine() : 0;
+			int		character	= range != null && range.getStart() != null ? range.getStart().getCharacter() : 0;
+			if ( document.getLineCount() > 0 && line >= document.getLineCount() ) {
+				line = document.getLineCount() - 1;
 			}
-			int offset = Math.min( document.getLineStartOffset( line ) + character, document.getTextLength() );
+			int offset = document.getLineCount() == 0
+			    ? 0
+			    : Math.min( document.getLineStartOffset( Math.max( line, 0 ) ) + Math.max( character, 0 ), document.getTextLength() );
 			new OpenFileDescriptor( project, vf, offset ).navigate( requestFocus );
 		} catch ( Exception e ) {
 			// Ignore navigation failures
@@ -131,12 +137,28 @@ public class BoxLangSymbolNavigationItem implements NavigationItem {
 
 	@Override
 	public boolean canNavigate() {
-		return symbol.getLocation() != null;
+		return symbolUri() != null;
 	}
 
 	@Override
 	public boolean canNavigateToSource() {
 		return canNavigate();
+	}
+
+	private @Nullable String symbolUri() {
+		Either<Location, WorkspaceSymbolLocation> location = symbol.getLocation();
+		if ( location == null ) {
+			return null;
+		}
+		return location.isLeft() ? location.getLeft().getUri() : location.getRight().getUri();
+	}
+
+	private @Nullable Range symbolRange() {
+		Either<Location, WorkspaceSymbolLocation> location = symbol.getLocation();
+		if ( location == null || !location.isLeft() ) {
+			return null;
+		}
+		return location.getLeft().getRange();
 	}
 
 	private static Icon iconFor( SymbolKind kind ) {

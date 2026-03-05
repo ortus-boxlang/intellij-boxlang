@@ -40,11 +40,32 @@ jobs:
       - name: Generate beta version
         id: version
         run: |
-          # Get base version from build.gradle.kts
-          BASE_VERSION=$(grep 'version = ' build.gradle.kts | head -1 | sed 's/.*version = "\(.*\)"/\1/')
-          # Use GitHub run number as incrementing build ID
-          BETA_VERSION="${BASE_VERSION}-beta.${GITHUB_RUN_NUMBER}"
+          # Determine current published stable version from latest release tag
+          # Supports tags like v1.2.3 (preferred) or 1.2.3.
+          LATEST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          if [ -z "${LATEST_TAG}" ]; then
+            LATEST_TAG=$(git tag -l '[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+          fi
+
+          if [ -n "${LATEST_TAG}" ]; then
+            PUBLISHED_VERSION="${LATEST_TAG#v}"
+          else
+            # Fallback if no tags exist yet: use build.gradle.kts version
+            PUBLISHED_VERSION=$(grep 'version = ' build.gradle.kts | head -1 | sed 's/.*version = "\(.*\)"/\1/' | cut -d'-' -f1)
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "${PUBLISHED_VERSION}"
+          if [ -z "${MAJOR}" ] || [ -z "${MINOR}" ] || [ -z "${PATCH}" ]; then
+            echo "Unable to parse published version: ${PUBLISHED_VERSION}"
+            exit 1
+          fi
+
+          NEXT_PATCH=$((PATCH + 1))
+          NEXT_VERSION="${MAJOR}.${MINOR}.${NEXT_PATCH}"
+          # Use GitHub run number as incrementing beta build ID
+          BETA_VERSION="${NEXT_VERSION}-beta.${GITHUB_RUN_NUMBER}"
           echo "VERSION=${BETA_VERSION}" >> $GITHUB_OUTPUT
+          echo "Published version: ${PUBLISHED_VERSION}"
           echo "Beta version: ${BETA_VERSION}"
 
       - name: Update version in build.gradle.kts
