@@ -57,7 +57,7 @@ intellijPlatform {
 
   pluginVerification {
     ides {
-      recommended()
+      ide("IC", "2024.2.6")
     }
   }
 }
