@@ -4,14 +4,13 @@ import com.intellij.ide.util.projectWizard.SettingsStep;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.ui.ComboBox;
 import com.intellij.openapi.ui.ValidationInfo;
-import com.intellij.platform.ProjectGeneratorPeer;
+import com.intellij.platform.GeneratorPeerImpl;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
 import java.awt.BorderLayout;
 import java.util.List;
 import javax.swing.DefaultComboBoxModel;
-import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import org.jetbrains.annotations.NotNull;
@@ -20,19 +19,23 @@ import org.jetbrains.annotations.Nullable;
 /**
  * UI panel for the BoxLang New Project wizard step.
  */
-public final class BoxLangProjectGeneratorPeer implements ProjectGeneratorPeer<BoxLangProjectSettings> {
+public final class BoxLangProjectGeneratorPeer extends GeneratorPeerImpl<BoxLangProjectSettings> {
 
-	private final JPanel								panel;
 	private final ComboBox<GitHubTemplate>				templateTypeCombo;
 	private final JBTextField							boxLangVersionField;
 	private final JBLabel								templateDescriptionLabel;
 	private final DefaultComboBoxModel<GitHubTemplate>	comboModel;
 
 	public BoxLangProjectGeneratorPeer() {
-		comboModel					= new DefaultComboBoxModel<>();
-		templateTypeCombo			= new ComboBox<>( comboModel );
-		boxLangVersionField			= new JBTextField();
-		templateDescriptionLabel	= new JBLabel();
+		this( createUiParts() );
+	}
+
+	private BoxLangProjectGeneratorPeer( UiParts uiParts ) {
+		super( new BoxLangProjectSettings(), uiParts.panel );
+		comboModel					= uiParts.comboModel;
+		templateTypeCombo			= uiParts.templateTypeCombo;
+		boxLangVersionField			= uiParts.boxLangVersionField;
+		templateDescriptionLabel	= uiParts.templateDescriptionLabel;
 
 		// Load initial templates from cache
 		loadTemplates( GitHubTemplateService.getInstance().getCachedTemplates() );
@@ -41,19 +44,27 @@ public final class BoxLangProjectGeneratorPeer implements ProjectGeneratorPeer<B
 		// Update description when selection changes
 		templateTypeCombo.addActionListener( e -> updateTemplateDescription() );
 
-		// Build the panel
-		JPanel descriptionPanel = new JPanel( new BorderLayout() );
+		// Fetch templates from GitHub in background
+		fetchTemplatesInBackground();
+	}
+
+	private static UiParts createUiParts() {
+		DefaultComboBoxModel<GitHubTemplate>	comboModel					= new DefaultComboBoxModel<>();
+		ComboBox<GitHubTemplate>				templateTypeCombo			= new ComboBox<>( comboModel );
+		JBTextField								boxLangVersionField			= new JBTextField();
+		JBLabel									templateDescriptionLabel	= new JBLabel();
+
+		JPanel									descriptionPanel			= new JPanel( new BorderLayout() );
 		descriptionPanel.add( templateDescriptionLabel, BorderLayout.WEST );
 
-		panel = FormBuilder.createFormBuilder()
+		JPanel panel = FormBuilder.createFormBuilder()
 		    .addLabeledComponent( "Project Type:", templateTypeCombo )
 		    .addComponentToRightColumn( descriptionPanel )
 		    .addLabeledComponent( "BoxLang Version:", boxLangVersionField )
 		    .addTooltip( "Leave empty to use the latest version" )
 		    .getPanel();
 
-		// Fetch templates from GitHub in background
-		fetchTemplatesInBackground();
+		return new UiParts( panel, comboModel, templateTypeCombo, boxLangVersionField, templateDescriptionLabel );
 	}
 
 	private void loadTemplates( List<GitHubTemplate> templates ) {
@@ -92,11 +103,6 @@ public final class BoxLangProjectGeneratorPeer implements ProjectGeneratorPeer<B
 	}
 
 	@Override
-	public @NotNull JComponent getComponent() {
-		return panel;
-	}
-
-	@Override
 	public void buildUI( @NotNull SettingsStep settingsStep ) {
 		settingsStep.addSettingsField( "Project Type:", templateTypeCombo );
 		settingsStep.addSettingsField( "BoxLang Version:", boxLangVersionField );
@@ -119,5 +125,13 @@ public final class BoxLangProjectGeneratorPeer implements ProjectGeneratorPeer<B
 	@Override
 	public boolean isBackgroundJobRunning() {
 		return false;
+	}
+
+	private record UiParts(
+	    JPanel panel,
+	    DefaultComboBoxModel<GitHubTemplate> comboModel,
+	    ComboBox<GitHubTemplate> templateTypeCombo,
+	    JBTextField boxLangVersionField,
+	    JBLabel templateDescriptionLabel ) {
 	}
 }

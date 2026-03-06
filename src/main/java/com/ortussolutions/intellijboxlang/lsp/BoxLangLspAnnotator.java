@@ -98,13 +98,13 @@ public final class BoxLangLspAnnotator implements Annotator {
 			case "comment" -> BoxLangTextAttributes.LINE_COMMENT;
 			case "number" -> BoxLangTextAttributes.NUMBER;
 			case "operator" -> BoxLangTextAttributes.OPERATOR;
-			case "class", "type" -> DefaultLanguageHighlighterColors.CLASS_NAME;
-			case "function", "method" -> DefaultLanguageHighlighterColors.FUNCTION_DECLARATION;
+			case "class", "type", "namespace" -> BoxLangTextAttributes.STORAGE_TYPE;
+			case "function", "method" -> BoxLangTextAttributes.FUNCTION_NAME;
 			case "parameter" -> DefaultLanguageHighlighterColors.PARAMETER;
 			case "property" -> DefaultLanguageHighlighterColors.INSTANCE_FIELD;
-			case "variable" -> DefaultLanguageHighlighterColors.LOCAL_VARIABLE;
-			case "namespace" -> DefaultLanguageHighlighterColors.CLASS_NAME;
+			case "variable" -> BoxLangTextAttributes.SCOPE_VARIABLE;
 			case "tag" -> BoxLangTextAttributes.TAG;
+			case "modifier" -> BoxLangTextAttributes.STORAGE_MODIFIER;
 			default -> BoxLangTextAttributes.IDENTIFIER;
 		};
 	}

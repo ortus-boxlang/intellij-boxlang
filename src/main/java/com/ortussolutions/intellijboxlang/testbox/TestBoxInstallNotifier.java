@@ -2,8 +2,8 @@ package com.ortussolutions.intellijboxlang.testbox;
 
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.process.OSProcessHandler;
-import com.intellij.execution.process.ProcessAdapter;
 import com.intellij.execution.process.ProcessEvent;
+import com.intellij.execution.process.ProcessListener;
 import com.intellij.notification.NotificationGroupManager;
 import com.intellij.notification.NotificationType;
 import com.intellij.openapi.project.Project;
@@ -122,7 +122,7 @@ public class TestBoxInstallNotifier implements ProjectActivity {
 			commandLine.withCharset( StandardCharsets.UTF_8 );
 
 			OSProcessHandler handler = new OSProcessHandler( commandLine );
-			handler.addProcessListener( new ProcessAdapter() {
+			handler.addProcessListener( new ProcessListener() {
 
 				@Override
 				public void processTerminated( @NotNull ProcessEvent event ) {

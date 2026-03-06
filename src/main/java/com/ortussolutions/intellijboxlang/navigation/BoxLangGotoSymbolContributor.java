@@ -137,7 +137,10 @@ public class BoxLangGotoSymbolContributor implements ChooseByNameContributorEx {
 				continue;
 			}
 			List<DocumentSymbol>	docSymbols	= service.requestDocumentSymbols( file, document );
-			String					uri			= file.toNioPath().toUri().toString();
+			String					uri			= BoxLangLspClientService.safeToUri( file );
+			if ( uri == null ) {
+				continue;
+			}
 			addDocumentSymbols( result, docSymbols, uri, null, nameFilter );
 		}
 		return result;

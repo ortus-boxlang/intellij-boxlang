@@ -15,7 +15,6 @@ import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.xdebugger.XDebugProcess;
 import com.intellij.xdebugger.XDebugProcessStarter;
 import com.intellij.xdebugger.XDebugSession;
-import com.intellij.xdebugger.XDebuggerManager;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import com.ortussolutions.intellijboxlang.run.BoxLangRunConfiguration;
 import com.ortussolutions.intellijboxlang.run.BoxLangRunProfileState;
@@ -77,8 +76,10 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
 		final List<String>	finalProgramArgs		= programArgs;
 
 		try {
-			XDebugSession debugSession = XDebuggerManager.getInstance( project ).startSession(
+			XDebugSession debugSession = XDebugApiCompat.startSession(
+			    project,
 			    environment,
+			    environment.getRunProfile().getName(),
 			    new XDebugProcessStarter() {
 
 				    @Override
@@ -94,7 +95,7 @@ public class BoxLangDebugRunner extends GenericProgramRunner<RunnerSettings> {
 			    }
 			);
 
-			return debugSession.getRunContentDescriptor();
+			return XDebugApiCompat.getRunContentDescriptor( debugSession );
 		} catch ( Exception e ) {
 			throw new ExecutionException( "Failed to start debug session: " + e.getMessage(), e );
 		}
