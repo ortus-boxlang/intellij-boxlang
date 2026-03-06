@@ -20,7 +20,8 @@ public final class BoxLangParserDefinition implements ParserDefinition {
 
 	private static final TokenSet	COMMENTS	= TokenSet.create(
 	    BoxLangTokenTypes.LINE_COMMENT,
-	    BoxLangTokenTypes.BLOCK_COMMENT
+	    BoxLangTokenTypes.BLOCK_COMMENT,
+	    BoxLangTokenTypes.DOC_COMMENT
 	);
 	private static final TokenSet	STRINGS		= TokenSet.create( BoxLangTokenTypes.STRING );
 

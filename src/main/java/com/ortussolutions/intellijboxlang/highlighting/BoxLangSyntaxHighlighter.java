@@ -34,6 +34,8 @@ public final class BoxLangSyntaxHighlighter extends SyntaxHighlighterBase {
 			key = BoxLangTextAttributes.LINE_COMMENT;
 		} else if ( tokenType == BoxLangTokenTypes.BLOCK_COMMENT ) {
 			key = BoxLangTextAttributes.BLOCK_COMMENT;
+		} else if ( tokenType == BoxLangTokenTypes.DOC_COMMENT ) {
+			key = BoxLangTextAttributes.DOC_COMMENT;
 		} else if ( tokenType == BoxLangTokenTypes.OPERATOR ) {
 			key = BoxLangTextAttributes.OPERATOR;
 		} else if ( tokenType == BoxLangTokenTypes.TAG ) {
@@ -50,6 +52,26 @@ public final class BoxLangSyntaxHighlighter extends SyntaxHighlighterBase {
 			key = BoxLangTextAttributes.DOT;
 		} else if ( tokenType == BoxLangTokenTypes.SEMICOLON ) {
 			key = BoxLangTextAttributes.SEMICOLON;
+		} else if ( tokenType == BoxLangTokenTypes.ANNOTATION ) {
+			key = BoxLangTextAttributes.ANNOTATION;
+		} else if ( tokenType == BoxLangTokenTypes.FUNCTION_NAME ) {
+			key = BoxLangTextAttributes.FUNCTION_NAME;
+		} else if ( tokenType == BoxLangTokenTypes.CONSTANT ) {
+			key = BoxLangTextAttributes.CONSTANT;
+		} else if ( tokenType == BoxLangTokenTypes.SCOPE_VARIABLE ) {
+			key = BoxLangTextAttributes.SCOPE_VARIABLE;
+		} else if ( tokenType == BoxLangTokenTypes.STORAGE_TYPE ) {
+			key = BoxLangTextAttributes.STORAGE_TYPE;
+		} else if ( tokenType == BoxLangTokenTypes.STORAGE_MODIFIER ) {
+			key = BoxLangTextAttributes.STORAGE_MODIFIER;
+		} else if ( tokenType == BoxLangTokenTypes.BUILTIN_FUNCTION ) {
+			key = BoxLangTextAttributes.BUILTIN_FUNCTION;
+		} else if ( tokenType == BoxLangTokenTypes.STRUCT_KEY ) {
+			key = BoxLangTextAttributes.STRUCT_KEY;
+		} else if ( tokenType == BoxLangTokenTypes.FUNCTION_CALL ) {
+			key = BoxLangTextAttributes.FUNCTION_CALL;
+		} else if ( tokenType == BoxLangTokenTypes.NAMED_ARGUMENT ) {
+			key = BoxLangTextAttributes.NAMED_ARGUMENT;
 		} else if ( tokenType == BoxLangTokenTypes.BAD_CHARACTER ) {
 			key = BoxLangTextAttributes.BAD_CHARACTER;
 		} else {

@@ -114,13 +114,15 @@ public class BoxLangSearchEqualityProvider implements SEResultsEqualityProvider 
 			return false;
 		}
 		// Match patterns like: name$cfc.class, name$cfm.class, name$bx.class, name$bxs.class, name$bxm.class
-		// Also: name$cfc$Closure_1.class, name_cfc$cf.class
+		// Also: name$cfc$Closure_1.class, name_cfc$cf.class, cfFoo2ecfc123$funcBAR.class
 		return name.contains( "$cfc" )
 		    || name.contains( "$cfm" )
 		    || name.contains( "$bx$" )
 		    || name.contains( "$bx." )
 		    || name.contains( "$bxs" )
 		    || name.contains( "$bxm" )
+		    || name.contains( "$func" )
+		    || name.contains( "$closure" )
 		    || name.contains( "_cfc$" )
 		    || name.contains( "_cfm$" );
 	}
