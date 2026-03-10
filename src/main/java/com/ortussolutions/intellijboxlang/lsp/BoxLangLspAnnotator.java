@@ -14,7 +14,9 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileType;
 import com.ortussolutions.intellijboxlang.highlighting.BoxLangTextAttributes;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensLegend;
 import org.jetbrains.annotations.NotNull;
@@ -55,6 +57,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 
 		List<Integer>	data		= tokens.getData();
 		List<String>	tokenTypes	= legend.getTokenTypes();
+		List<String>	tokenMods	= legend.getTokenModifiers();
 		int				line		= 0;
 		int				column		= 0;
 		for ( int i = 0; i + 4 < data.size(); i += 5 ) {
@@ -62,6 +65,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 			int	deltaStart		= data.get( i + 1 );
 			int	length			= data.get( i + 2 );
 			int	tokenTypeIndex	= data.get( i + 3 );
+			int	tokenModifier	= data.get( i + 4 );
 
 			line	+= deltaLine;
 			column	= deltaLine == 0 ? column + deltaStart : deltaStart;
@@ -76,7 +80,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 			}
 
 			String				tokenType	= tokenTypeIndex < tokenTypes.size() ? tokenTypes.get( tokenTypeIndex ) : null;
-			TextAttributesKey	key			= mapTokenType( tokenType );
+			Set<String>			modifiers	= decodeTokenModifiers( tokenModifier, tokenMods );
+			TextAttributesKey	key			= mapSemanticToken( tokenType, modifiers );
 			if ( key == null ) {
 				continue;
 			}
@@ -88,9 +93,33 @@ public final class BoxLangLspAnnotator implements Annotator {
 		}
 	}
 
-	private TextAttributesKey mapTokenType( String tokenType ) {
+	static Set<String> decodeTokenModifiers( int tokenModifierBits, List<String> legendModifiers ) {
+		if ( tokenModifierBits == 0 || legendModifiers == null || legendModifiers.isEmpty() ) {
+			return Set.of();
+		}
+		Set<String> modifiers = new HashSet<>();
+		for ( int bit = 0; bit < legendModifiers.size(); bit++ ) {
+			if ( ( tokenModifierBits & ( 1 << bit ) ) != 0 ) {
+				modifiers.add( legendModifiers.get( bit ) );
+			}
+		}
+		return modifiers.isEmpty() ? Set.of() : Set.copyOf( modifiers );
+	}
+
+	static TextAttributesKey mapSemanticToken( String tokenType, Set<String> modifiers ) {
 		if ( tokenType == null ) {
 			return null;
+		}
+		Set<String>	safeModifiers	= modifiers == null ? Set.of() : modifiers;
+		boolean		isDeclaration	= safeModifiers.contains( "declaration" ) || safeModifiers.contains( "definition" );
+		if ( isDeclaration && ( "function".equals( tokenType ) || "method".equals( tokenType ) ) ) {
+			return BoxLangTextAttributes.FUNCTION_NAME;
+		}
+		if ( "function".equals( tokenType ) && safeModifiers.contains( "defaultLibrary" ) ) {
+			return BoxLangTextAttributes.BUILTIN_FUNCTION;
+		}
+		if ( "method".equals( tokenType ) && safeModifiers.contains( "defaultLibrary" ) ) {
+			return BoxLangTextAttributes.MEMBER_FUNCTION;
 		}
 		return switch ( tokenType ) {
 			case "keyword" -> BoxLangTextAttributes.KEYWORD;
@@ -99,7 +128,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 			case "number" -> BoxLangTextAttributes.NUMBER;
 			case "operator" -> BoxLangTextAttributes.OPERATOR;
 			case "class", "type", "namespace" -> BoxLangTextAttributes.STORAGE_TYPE;
-			case "function", "method" -> BoxLangTextAttributes.FUNCTION_NAME;
+			case "function" -> BoxLangTextAttributes.FUNCTION_CALL;
+			case "method" -> BoxLangTextAttributes.METHOD_CALL;
 			case "parameter" -> DefaultLanguageHighlighterColors.PARAMETER;
 			case "property" -> DefaultLanguageHighlighterColors.INSTANCE_FIELD;
 			case "variable" -> BoxLangTextAttributes.SCOPE_VARIABLE;

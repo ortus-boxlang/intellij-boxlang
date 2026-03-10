@@ -614,12 +614,12 @@ public final class BoxLangProjectConfigurable implements Configurable {
 	}
 
 	private void deleteLsp() {
-		InstalledModuleStatus status = ModuleStatusResolver.resolveLspStatus( project );
+		InstalledModuleStatus status = ModuleStatusResolver.resolveProjectLspStatus( project, cachedLspLatestVersion );
 		if ( !status.installed || status.path == null ) {
 			return;
 		}
 
-		Path	modulePath	= Path.of( status.path );
+		Path	modulePath	= lspInstalledPath != null ? lspInstalledPath : Path.of( status.path );
 
 		int		confirm		= Messages.showYesNoDialog(
 		    project,
@@ -703,12 +703,12 @@ public final class BoxLangProjectConfigurable implements Configurable {
 	}
 
 	private void deleteDebugger() {
-		InstalledModuleStatus status = ModuleStatusResolver.resolveDebuggerStatus( project );
+		InstalledModuleStatus status = ModuleStatusResolver.resolveProjectDebuggerStatus( project, cachedDebuggerLatestVersion );
 		if ( !status.installed || status.path == null ) {
 			return;
 		}
 
-		Path	modulePath	= Path.of( status.path );
+		Path	modulePath	= debuggerInstalledPath != null ? debuggerInstalledPath : Path.of( status.path );
 		String	displayPath	= modulePath.toString();
 
 		int		confirm		= Messages.showYesNoDialog(

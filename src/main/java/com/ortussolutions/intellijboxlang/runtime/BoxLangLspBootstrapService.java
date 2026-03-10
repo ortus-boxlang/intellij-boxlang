@@ -77,16 +77,27 @@ public final class BoxLangLspBootstrapService {
 	private static LspModuleInfo resolveLspModule( Project project, BoxLangResolvedSettings settings ) throws IOException {
 		// 0. If a module path override is configured, use it directly
 		if ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() ) {
-			Path overridePath = Path.of( settings.lspModulePath );
-			if ( Files.exists( overridePath ) ) {
-				LspModuleInfo info = new LspModuleInfo();
-				// lspModulePath points to the folder containing bx-lsp/
-				info.modulePath		= overridePath.resolve( "bx-lsp" );
-				info.boxJsonPath	= LspModuleResolver.findBoxJson( info.modulePath );
-				info.needsDownload	= info.boxJsonPath == null;
-				if ( !info.needsDownload ) {
-					return info;
+			Path overridePath = ConfiguredPathResolver.resolvePath( project, settings.lspModulePath );
+			if ( overridePath != null ) {
+				Path modulePath = LspModuleResolver.resolveOverrideModulePath( overridePath );
+				if ( modulePath != null ) {
+					Path boxJsonPath = LspModuleResolver.findBoxJson( modulePath );
+					if ( boxJsonPath != null ) {
+						LspModuleInfo info = new LspModuleInfo();
+						info.modulePath		= modulePath;
+						info.boxJsonPath	= boxJsonPath;
+						info.needsDownload	= false;
+						LOG.info( "Using LSP module override at " + modulePath );
+						return info;
+					}
 				}
+				if ( Files.exists( overridePath ) ) {
+					LOG.warn( "Configured LSP module override does not look like a bx-lsp module: " + overridePath );
+				} else {
+					LOG.warn( "Configured LSP module override path does not exist: " + overridePath );
+				}
+			} else {
+				LOG.warn( "Configured LSP module override path is invalid: " + settings.lspModulePath );
 			}
 		}
 

@@ -109,8 +109,8 @@ public final class ModuleStatusResolver {
 
 		// If an explicit module path override is set, check it first
 		if ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() ) {
-			Path	overridePath	= Path.of( settings.lspModulePath );
-			Path	bxLspPath		= overridePath.resolve( "bx-lsp" );
+			Path	overridePath	= ConfiguredPathResolver.resolvePath( project, settings.lspModulePath );
+			Path	bxLspPath		= LspModuleResolver.resolveOverrideModulePath( overridePath );
 			Path	boxJsonPath		= LspModuleResolver.findBoxJson( bxLspPath );
 			if ( boxJsonPath != null ) {
 				String version = ModuleVersionReader.readVersion( boxJsonPath );
@@ -178,8 +178,8 @@ public final class ModuleStatusResolver {
 
 		// Explicit global module path override
 		if ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() ) {
-			Path	overridePath	= Path.of( settings.lspModulePath );
-			Path	bxLspPath		= overridePath.resolve( "bx-lsp" );
+			Path	overridePath	= ConfiguredPathResolver.resolvePath( null, settings.lspModulePath );
+			Path	bxLspPath		= LspModuleResolver.resolveOverrideModulePath( overridePath );
 			Path	boxJson			= LspModuleResolver.findBoxJson( bxLspPath );
 			if ( boxJson != null ) {
 				String version = ModuleVersionReader.readVersion( boxJson );

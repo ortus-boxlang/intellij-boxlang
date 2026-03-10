@@ -1,5 +1,6 @@
 package com.ortussolutions.intellijboxlang.lsp;
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.application.ApplicationManager;
@@ -55,23 +56,62 @@ import org.jetbrains.annotations.Nullable;
 @Service( Service.Level.PROJECT )
 public final class BoxLangLspClientService {
 
-	private static final Logger										LOG								= Logger.getInstance( BoxLangLspClientService.class );
-	private static final int										CONNECT_TIMEOUT_MS				= 10000;
-	private static final int										REQUEST_TIMEOUT_MS				= 5000;
-	private static final int										INITIALIZE_TIMEOUT_MS			= 20000;
+	private static final Logger										LOG									= Logger.getInstance( BoxLangLspClientService.class );
+	private static final int										CONNECT_TIMEOUT_MS					= 10000;
+	private static final int										REQUEST_TIMEOUT_MS					= 5000;
+	private static final int										INITIALIZE_TIMEOUT_MS				= 20000;
+	private static final List<String>								SUPPORTED_SEMANTIC_TOKEN_TYPES		= List.of(
+	    "namespace",
+	    "type",
+	    "class",
+	    "enum",
+	    "interface",
+	    "struct",
+	    "typeParameter",
+	    "parameter",
+	    "variable",
+	    "property",
+	    "enumMember",
+	    "event",
+	    "function",
+	    "method",
+	    "macro",
+	    "keyword",
+	    "modifier",
+	    "comment",
+	    "string",
+	    "number",
+	    "regexp",
+	    "operator",
+	    "decorator",
+	    "tag"
+	);
+	private static final List<String>								SUPPORTED_SEMANTIC_TOKEN_MODIFIERS	= List.of(
+	    "declaration",
+	    "definition",
+	    "readonly",
+	    "static",
+	    "deprecated",
+	    "abstract",
+	    "async",
+	    "modification",
+	    "documentation",
+	    "defaultLibrary"
+	);
 
 	private final Project											project;
-	private final Map<String, Integer>								documentVersions				= new ConcurrentHashMap<>();
-	private final Map<String, Long>									documentStamps					= new ConcurrentHashMap<>();
-	private final Map<String, CachedTokens>							tokenCache						= new ConcurrentHashMap<>();
-	private final Map<String, CachedSymbols>						symbolCache						= new ConcurrentHashMap<>();
-	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics						= new ConcurrentHashMap<>();
-	private final java.util.concurrent.atomic.AtomicBoolean			starting						= new java.util.concurrent.atomic.AtomicBoolean( false );
-	private final Object											startLock						= new Object();
-	private boolean													diagnosticPullSupported			= false;
-	private boolean													semanticTokensSupported			= false;
-	private boolean													workspaceSymbolsSupported		= false;
-	private boolean													workspaceSymbolsDisabledLogged	= false;
+	private final Map<String, Integer>								documentVersions					= new ConcurrentHashMap<>();
+	private final Map<String, Long>									documentStamps						= new ConcurrentHashMap<>();
+	private final Map<String, CachedTokens>							tokenCache							= new ConcurrentHashMap<>();
+	private final Map<String, CachedSymbols>						symbolCache							= new ConcurrentHashMap<>();
+	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics							= new ConcurrentHashMap<>();
+	private final java.util.concurrent.atomic.AtomicBoolean			starting							= new java.util.concurrent.atomic.AtomicBoolean(
+	    false );
+	private final Object											startLock							= new Object();
+	private boolean													diagnosticPullSupported				= false;
+	private boolean													semanticTokensSupported				= false;
+	private boolean													workspaceSymbolsSupported			= false;
+	private boolean													workspaceSymbolsDisabledLogged		= false;
 
 	private Process													process;
 	private Socket													socket;
@@ -103,17 +143,27 @@ public final class BoxLangLspClientService {
 
 	public SemanticTokens requestSemanticTokens( VirtualFile file, Document document ) {
 		if ( !ensureStarted() ) {
+			LOG.info( "Skipping semantic tokens request: LSP server not started yet" );
 			return null;
 		}
 		if ( !semanticTokensSupported || legend == null ) {
+			LOG.info(
+			    "Skipping semantic tokens request: supported=" + semanticTokensSupported
+			        + ", legendPresent=" + ( legend != null )
+			);
 			return null;
 		}
 		String uri = safeToUri( file );
 		if ( uri == null ) {
+			LOG.info( "Skipping semantic tokens request: unable to resolve document URI from VirtualFile" );
 			return null;
 		}
 		CachedTokens cached = tokenCache.get( uri );
 		if ( cached != null && cached.stamp == document.getModificationStamp() ) {
+			LOG.info(
+			    "Using cached semantic tokens: uri='" + uri + "', tuples=" + tokenTupleCount( cached.tokens )
+			        + ", stamp=" + cached.stamp
+			);
 			return cached.tokens;
 		}
 		syncDocument( uri, document );
@@ -123,6 +173,15 @@ public final class BoxLangLspClientService {
 			SemanticTokens						tokens	= future.get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
 			if ( tokens != null ) {
 				tokenCache.put( uri, new CachedTokens( document.getModificationStamp(), tokens ) );
+				int	legendTypes	= legend.getTokenTypes() != null ? legend.getTokenTypes().size() : 0;
+				int	legendMods	= legend.getTokenModifiers() != null ? legend.getTokenModifiers().size() : 0;
+				LOG.info(
+				    "LSP semanticTokens/full success: uri='" + uri + "', tuples=" + tokenTupleCount( tokens )
+				        + ", ints=" + tokens.getData().size() + ", legendTypes=" + legendTypes + ", legendModifiers="
+				        + legendMods
+				);
+			} else {
+				LOG.info( "LSP semanticTokens/full returned null: uri='" + uri + "'" );
 			}
 			return tokens;
 		} catch ( Exception e ) {
@@ -245,6 +304,7 @@ public final class BoxLangLspClientService {
 					startServer();
 					if ( server != null ) {
 						LOG.info( "BoxLang LSP started" );
+						requestEditorRehighlight();
 					}
 				} catch ( Exception e ) {
 					LOG.warn( "Unable to start BoxLang LSP", e );
@@ -288,10 +348,16 @@ public final class BoxLangLspClientService {
 
 		InitializeResult result = server.initialize( createInitializeParams() )
 		    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
-		legend						= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
+		legend					= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
 		    ? result.getCapabilities().getSemanticTokensProvider().getLegend()
 		    : null;
-		semanticTokensSupported		= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null;
+		semanticTokensSupported	= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null;
+		int	legendTypes	= legend != null && legend.getTokenTypes() != null ? legend.getTokenTypes().size() : 0;
+		int	legendMods	= legend != null && legend.getTokenModifiers() != null ? legend.getTokenModifiers().size() : 0;
+		LOG.info(
+		    "LSP semantic tokens capability: supported=" + semanticTokensSupported + ", legendTypes=" + legendTypes + ", legendModifiers="
+		        + legendMods
+		);
 		workspaceSymbolsSupported	= result.getCapabilities() != null && result.getCapabilities().getWorkspaceSymbolProvider() != null;
 		diagnosticPullSupported		= result.getCapabilities() != null
 		    && result.getCapabilities().getDiagnosticProvider() != null;
@@ -314,8 +380,8 @@ public final class BoxLangLspClientService {
 		requests.setFull( Either.forLeft( true ) );
 		requests.setRange( Either.forLeft( false ) );
 		semanticTokens.setRequests( requests );
-		semanticTokens.setTokenTypes( List.of() );
-		semanticTokens.setTokenModifiers( List.of() );
+		semanticTokens.setTokenTypes( SUPPORTED_SEMANTIC_TOKEN_TYPES );
+		semanticTokens.setTokenModifiers( SUPPORTED_SEMANTIC_TOKEN_MODIFIERS );
 		semanticTokens.setFormats( List.of( "relative" ) );
 		semanticTokens.setOverlappingTokenSupport( true );
 		semanticTokens.setMultilineTokenSupport( true );
@@ -346,6 +412,15 @@ public final class BoxLangLspClientService {
 			    new org.eclipse.lsp4j.DidChangeTextDocumentParams( identifier, List.of( change ) )
 			);
 		}
+	}
+
+	private void requestEditorRehighlight() {
+		ApplicationManager.getApplication().invokeLater( () -> {
+			if ( project.isDisposed() ) {
+				return;
+			}
+			DaemonCodeAnalyzer.getInstance( project ).restart();
+		} );
 	}
 
 	private int allocatePort() throws IOException {
@@ -611,6 +686,13 @@ public final class BoxLangLspClientService {
 			}
 		}
 		return null;
+	}
+
+	private static int tokenTupleCount( SemanticTokens tokens ) {
+		if ( tokens == null || tokens.getData() == null ) {
+			return 0;
+		}
+		return tokens.getData().size() / 5;
 	}
 
 	private record CachedTokens( long stamp, SemanticTokens tokens ) {
