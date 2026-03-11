@@ -8,9 +8,12 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.editor.Document;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
+import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.psi.PsiFile;
+import com.intellij.psi.PsiManager;
 import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
@@ -33,9 +36,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.eclipse.lsp4j.ClientCapabilities;
+import org.eclipse.lsp4j.DeclarationParams;
+import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.Position;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensCapabilities;
 import org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequests;
@@ -112,6 +121,8 @@ public final class BoxLangLspClientService {
 	private boolean													semanticTokensSupported				= false;
 	private boolean													workspaceSymbolsSupported			= false;
 	private boolean													workspaceSymbolsDisabledLogged		= false;
+	private boolean													declarationSupported				= false;
+	private boolean													declarationDisabledLogged			= false;
 
 	private Process													process;
 	private Socket													socket;
@@ -262,6 +273,59 @@ public final class BoxLangLspClientService {
 		}
 	}
 
+	public List<Location> requestDefinition( VirtualFile file, Document document, int offset ) {
+		if ( !ensureStarted() ) {
+			return List.of();
+		}
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return List.of();
+		}
+		syncDocument( uri, document );
+		Position position = positionAt( document, offset );
+
+		try {
+			DefinitionParams	params		= new DefinitionParams( new TextDocumentIdentifier( uri ), position );
+			List<Location>		locations	= flattenLocations(
+			    server.getTextDocumentService().definition( params ).get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS ) );
+			if ( !locations.isEmpty() ) {
+				LOG.debug( "LSP textDocument/definition success: uri='" + uri + "', offset=" + offset + ", locations=" + locations.size() );
+				return locations;
+			}
+			LOG.debug( "LSP textDocument/definition returned no locations: uri='" + uri + "', offset=" + offset + "'" );
+		} catch ( Exception e ) {
+			logLspRequestFailure( "textDocument/definition", "uri='" + uri + "', offset=" + offset, e );
+		}
+
+		if ( !declarationSupported ) {
+			return List.of();
+		}
+
+		try {
+			DeclarationParams	params		= new DeclarationParams( new TextDocumentIdentifier( uri ), position );
+			List<Location>		locations	= flattenLocations(
+			    server.getTextDocumentService().declaration( params ).get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS ) );
+			if ( !locations.isEmpty() ) {
+				LOG.debug( "LSP textDocument/declaration success: uri='" + uri + "', offset=" + offset + ", locations=" + locations.size() );
+			} else {
+				LOG.debug( "LSP textDocument/declaration returned no locations: uri='" + uri + "', offset=" + offset + "'" );
+			}
+			return locations;
+		} catch ( Exception e ) {
+			if ( isUnsupportedDeclarationError( e ) ) {
+				declarationSupported = false;
+				if ( !declarationDisabledLogged ) {
+					declarationDisabledLogged = true;
+					LOG.warn(
+					    "LSP textDocument/declaration appears unsupported by the running server instance; disabling declaration fallback for this session."
+					);
+				}
+			}
+			logLspRequestFailure( "textDocument/declaration", "uri='" + uri + "', offset=" + offset, e );
+			return List.of();
+		}
+	}
+
 	private boolean ensureStarted() {
 		if ( server != null ) {
 			return true;
@@ -359,7 +423,9 @@ public final class BoxLangLspClientService {
 		        + legendMods
 		);
 		workspaceSymbolsSupported	= result.getCapabilities() != null && result.getCapabilities().getWorkspaceSymbolProvider() != null;
-		diagnosticPullSupported		= result.getCapabilities() != null
+		declarationSupported		= isDeclarationProviderSupported( result );
+		LOG.info( "LSP declaration capability: supported=" + declarationSupported );
+		diagnosticPullSupported = result.getCapabilities() != null
 		    && result.getCapabilities().getDiagnosticProvider() != null;
 		server.initialized( new InitializedParams() );
 	}
@@ -419,7 +485,14 @@ public final class BoxLangLspClientService {
 			if ( project.isDisposed() ) {
 				return;
 			}
-			DaemonCodeAnalyzer.getInstance( project ).restart();
+			DaemonCodeAnalyzer	analyzer	= DaemonCodeAnalyzer.getInstance( project );
+			PsiManager			psiManager	= PsiManager.getInstance( project );
+			for ( VirtualFile openFile : FileEditorManager.getInstance( project ).getOpenFiles() ) {
+				PsiFile psiFile = psiManager.findFile( openFile );
+				if ( psiFile != null ) {
+					analyzer.restart( psiFile );
+				}
+			}
 		} );
 	}
 
@@ -607,6 +680,40 @@ public final class BoxLangLspClientService {
 		return dataText.contains( "UnsupportedOperationException" ) && dataText.contains( "WorkspaceService.symbol" );
 	}
 
+	private boolean isUnsupportedDeclarationError( Exception e ) {
+		Throwable cause = e;
+		if ( e instanceof ExecutionException exec && exec.getCause() != null ) {
+			cause = exec.getCause();
+		}
+		if ( ! ( cause instanceof ResponseErrorException responseErrorException ) || responseErrorException.getResponseError() == null ) {
+			return false;
+		}
+		Object data = responseErrorException.getResponseError().getData();
+		if ( data != null ) {
+			String dataText = String.valueOf( data );
+			if ( dataText.contains( "UnsupportedOperationException" ) && dataText.contains( "TextDocumentService.declaration" ) ) {
+				return true;
+			}
+		}
+		String message = responseErrorException.getResponseError().getMessage();
+		return message != null && message.contains( "Method not found" ) && message.contains( "textDocument/declaration" );
+	}
+
+	private boolean isDeclarationProviderSupported( InitializeResult result ) {
+		if ( result == null || result.getCapabilities() == null ) {
+			return false;
+		}
+		Either<Boolean, org.eclipse.lsp4j.DeclarationRegistrationOptions> provider = result.getCapabilities().getDeclarationProvider();
+		if ( provider == null ) {
+			return false;
+		}
+		if ( provider.isLeft() ) {
+			Boolean enabled = provider.getLeft();
+			return Boolean.TRUE.equals( enabled );
+		}
+		return provider.getRight() != null;
+	}
+
 	/**
 	 * Maps LSP document symbols to a list of DocumentSymbol objects.
 	 * Handles both DocumentSymbol (preferred) and legacy SymbolInformation responses.
@@ -666,6 +773,38 @@ public final class BoxLangLspClientService {
 			symbol.setSelectionRange( location.getRange() );
 		}
 		return symbol;
+	}
+
+	private static Position positionAt( Document document, int offset ) {
+		int	clamped		= Math.max( 0, Math.min( offset, document.getTextLength() ) );
+		int	line		= document.getLineNumber( clamped );
+		int	lineStart	= line >= 0 && line < document.getLineCount() ? document.getLineStartOffset( line ) : 0;
+		return new Position( Math.max( line, 0 ), Math.max( clamped - lineStart, 0 ) );
+	}
+
+	private static List<Location> flattenLocations( Either<List<? extends Location>, List<? extends LocationLink>> result ) {
+		if ( result == null ) {
+			return List.of();
+		}
+		if ( result.isLeft() ) {
+			return List.copyOf( result.getLeft() );
+		}
+		List<? extends LocationLink> links = result.getRight();
+		if ( links == null || links.isEmpty() ) {
+			return List.of();
+		}
+		List<Location> locations = new ArrayList<>( links.size() );
+		for ( LocationLink link : links ) {
+			if ( link == null || link.getTargetUri() == null ) {
+				continue;
+			}
+			Range range = link.getTargetSelectionRange() != null ? link.getTargetSelectionRange() : link.getTargetRange();
+			if ( range == null ) {
+				continue;
+			}
+			locations.add( new Location( link.getTargetUri(), range ) );
+		}
+		return locations;
 	}
 
 	private static <T> T readField( Object source, String fieldName, Class<T> type ) {

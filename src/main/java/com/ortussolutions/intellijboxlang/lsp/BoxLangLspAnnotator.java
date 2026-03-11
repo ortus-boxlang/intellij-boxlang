@@ -16,9 +16,12 @@ import com.ortussolutions.intellijboxlang.file.BoxLangFileType;
 import com.ortussolutions.intellijboxlang.highlighting.BoxLangTextAttributes;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensLegend;
+import org.eclipse.lsp4j.SymbolKind;
 import org.jetbrains.annotations.NotNull;
 
 public final class BoxLangLspAnnotator implements Annotator {
@@ -54,12 +57,16 @@ public final class BoxLangLspAnnotator implements Annotator {
 		if ( tokens == null || legend == null ) {
 			return;
 		}
+		Set<String>		declaredProperties	= collectDeclaredProperties(
+		    lspService.requestDocumentSymbols( psiFile.getVirtualFile(), document )
+		);
 
-		List<Integer>	data		= tokens.getData();
-		List<String>	tokenTypes	= legend.getTokenTypes();
-		List<String>	tokenMods	= legend.getTokenModifiers();
-		int				line		= 0;
-		int				column		= 0;
+		List<Integer>	data				= tokens.getData();
+		List<String>	tokenTypes			= legend.getTokenTypes();
+		List<String>	tokenMods			= legend.getTokenModifiers();
+		CharSequence	source				= document.getCharsSequence();
+		int				line				= 0;
+		int				column				= 0;
 		for ( int i = 0; i + 4 < data.size(); i += 5 ) {
 			int	deltaLine		= data.get( i );
 			int	deltaStart		= data.get( i + 1 );
@@ -81,7 +88,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 
 			String				tokenType	= tokenTypeIndex < tokenTypes.size() ? tokenTypes.get( tokenTypeIndex ) : null;
 			Set<String>			modifiers	= decodeTokenModifiers( tokenModifier, tokenMods );
-			TextAttributesKey	key			= mapSemanticToken( tokenType, modifiers );
+			TextAttributesKey	key			= resolveSemanticToken( tokenType, modifiers, source, startOffset, endOffset, declaredProperties );
 			if ( key == null ) {
 				continue;
 			}
@@ -104,6 +111,95 @@ public final class BoxLangLspAnnotator implements Annotator {
 			}
 		}
 		return modifiers.isEmpty() ? Set.of() : Set.copyOf( modifiers );
+	}
+
+	static TextAttributesKey resolveSemanticToken(
+	    String tokenType,
+	    Set<String> modifiers,
+	    CharSequence source,
+	    int startOffset,
+	    int endOffset,
+	    Set<String> declaredProperties ) {
+		if ( "variable".equals( tokenType )
+		    && isVariablesScopeMember( source, startOffset )
+		    && isDeclaredPropertyReference( source, startOffset, endOffset, declaredProperties ) ) {
+			// In BoxLang, component properties live in the variables scope.
+			return DefaultLanguageHighlighterColors.INSTANCE_FIELD;
+		}
+		return mapSemanticToken( tokenType, modifiers );
+	}
+
+	static Set<String> collectDeclaredProperties( List<DocumentSymbol> symbols ) {
+		if ( symbols == null || symbols.isEmpty() ) {
+			return Set.of();
+		}
+		Set<String> properties = new HashSet<>();
+		for ( DocumentSymbol symbol : symbols ) {
+			collectDeclaredProperties( symbol, properties );
+		}
+		return properties.isEmpty() ? Set.of() : Set.copyOf( properties );
+	}
+
+	private static void collectDeclaredProperties( DocumentSymbol symbol, Set<String> properties ) {
+		if ( symbol == null ) {
+			return;
+		}
+		if ( symbol.getKind() == SymbolKind.Property || symbol.getKind() == SymbolKind.Field ) {
+			String name = symbol.getName();
+			if ( name != null && !name.isBlank() ) {
+				properties.add( name.toLowerCase( Locale.ROOT ) );
+			}
+		}
+		if ( symbol.getChildren() == null || symbol.getChildren().isEmpty() ) {
+			return;
+		}
+		for ( DocumentSymbol child : symbol.getChildren() ) {
+			collectDeclaredProperties( child, properties );
+		}
+	}
+
+	private static boolean isDeclaredPropertyReference( CharSequence source, int startOffset, int endOffset, Set<String> declaredProperties ) {
+		if ( declaredProperties == null || declaredProperties.isEmpty() || source == null ) {
+			return false;
+		}
+		if ( startOffset < 0 || endOffset <= startOffset || endOffset > source.length() ) {
+			return false;
+		}
+		String tokenText = source.subSequence( startOffset, endOffset ).toString().toLowerCase( Locale.ROOT );
+		return declaredProperties.contains( tokenText );
+	}
+
+	static boolean isVariablesScopeMember( CharSequence source, int tokenStartOffset ) {
+		if ( source == null || tokenStartOffset <= 0 || tokenStartOffset > source.length() ) {
+			return false;
+		}
+
+		int index = tokenStartOffset - 1;
+		while ( index >= 0 && Character.isWhitespace( source.charAt( index ) ) ) {
+			index--;
+		}
+		if ( index < 0 || source.charAt( index ) != '.' ) {
+			return false;
+		}
+
+		index--;
+		while ( index >= 0 && Character.isWhitespace( source.charAt( index ) ) ) {
+			index--;
+		}
+		if ( index < 0 || !isSemanticIdentifierPart( source.charAt( index ) ) ) {
+			return false;
+		}
+
+		int end = index;
+		while ( index >= 0 && isSemanticIdentifierPart( source.charAt( index ) ) ) {
+			index--;
+		}
+		String scope = source.subSequence( index + 1, end + 1 ).toString();
+		return "variables".equalsIgnoreCase( scope );
+	}
+
+	private static boolean isSemanticIdentifierPart( char ch ) {
+		return ch == '_' || ch == '$' || Character.isLetterOrDigit( ch );
 	}
 
 	static TextAttributesKey mapSemanticToken( String tokenType, Set<String> modifiers ) {
@@ -132,7 +228,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 			case "method" -> BoxLangTextAttributes.METHOD_CALL;
 			case "parameter" -> DefaultLanguageHighlighterColors.PARAMETER;
 			case "property" -> DefaultLanguageHighlighterColors.INSTANCE_FIELD;
-			case "variable" -> BoxLangTextAttributes.SCOPE_VARIABLE;
+			// Semantic "variable" covers local identifiers and should de-keyword lexed keyword-like names.
+			case "variable" -> BoxLangTextAttributes.IDENTIFIER;
 			case "tag" -> BoxLangTextAttributes.TAG;
 			case "modifier" -> BoxLangTextAttributes.STORAGE_MODIFIER;
 			default -> BoxLangTextAttributes.IDENTIFIER;

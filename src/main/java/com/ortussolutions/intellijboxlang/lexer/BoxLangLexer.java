@@ -237,6 +237,7 @@ public final class BoxLangLexer extends LexerBase {
 			// Check if the next non-whitespace char is '(' for BIF/function-name detection
 			boolean	followedByParen		= isFollowedByParen( position );
 			boolean	followedByColon		= isFollowedByColon( position );
+			boolean	followedByDot		= isFollowedByDot( position );
 			boolean	afterDot			= lastNonWsTokenType == BoxLangTokenTypes.DOT;
 			boolean	followedByEquals	= isFollowedByEquals( position );
 
@@ -265,6 +266,13 @@ public final class BoxLangLexer extends LexerBase {
 				lastWasFunctionKeyword	= false;
 			} else if ( followedByParen && BUILTIN_FUNCTIONS.contains( lowerText ) ) {
 				tokenType				= BoxLangTokenTypes.BUILTIN_FUNCTION;
+				lastWasFunctionKeyword	= false;
+			} else if ( "param".equals( lowerText )
+			    && ( lastNonWsTokenType == BoxLangTokenTypes.STORAGE_TYPE || lastNonWsTokenType == BoxLangTokenTypes.STORAGE_MODIFIER
+			        || followedByDot ) ) {
+				// Allow `param` as an identifier in typed declarations, e.g. `required struct param`
+				// and member access expressions, e.g. `return param.keyArray()`.
+				tokenType				= BoxLangTokenTypes.IDENTIFIER;
 				lastWasFunctionKeyword	= false;
 			} else if ( KEYWORDS.contains( lowerText ) ) {
 				tokenType				= BoxLangTokenTypes.KEYWORD;
@@ -467,6 +475,7 @@ public final class BoxLangLexer extends LexerBase {
 			String	lowerText		= text.toLowerCase( Locale.ROOT );
 
 			boolean	followedByParen	= isFollowedByParen( position );
+			boolean	followedByDot	= isFollowedByDot( position );
 
 			if ( CONSTANTS.contains( lowerText ) ) {
 				tokenType = BoxLangTokenTypes.CONSTANT;
@@ -474,6 +483,10 @@ public final class BoxLangLexer extends LexerBase {
 				tokenType = BoxLangTokenTypes.SCOPE_VARIABLE;
 			} else if ( followedByParen && BUILTIN_FUNCTIONS.contains( lowerText ) ) {
 				tokenType = BoxLangTokenTypes.BUILTIN_FUNCTION;
+			} else if ( followedByParen ) {
+				tokenType = BoxLangTokenTypes.FUNCTION_CALL;
+			} else if ( "param".equals( lowerText ) && followedByDot ) {
+				tokenType = BoxLangTokenTypes.IDENTIFIER;
 			} else if ( KEYWORDS.contains( lowerText ) || STORAGE_TYPES.contains( lowerText )
 			    || STORAGE_MODIFIERS.contains( lowerText ) ) {
 				tokenType = BoxLangTokenTypes.KEYWORD;
@@ -666,6 +679,18 @@ public final class BoxLangLexer extends LexerBase {
 			index++;
 		}
 		return index < bufferEnd && buffer.charAt( index ) == '(';
+	}
+
+	private boolean isFollowedByDot( int pos ) {
+		int index = pos;
+		while ( index < bufferEnd && Character.isWhitespace( buffer.charAt( index ) ) ) {
+			index++;
+		}
+		if ( index >= bufferEnd || buffer.charAt( index ) != '.' ) {
+			return false;
+		}
+		// Exclude range operator `..`.
+		return index + 1 >= bufferEnd || buffer.charAt( index + 1 ) != '.';
 	}
 
 	/**

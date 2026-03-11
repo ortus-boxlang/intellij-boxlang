@@ -113,10 +113,10 @@ public final class BoxLangTextAttributes {
 	    "BOXLANG_STRUCT_KEY",
 	    DefaultLanguageHighlighterColors.IDENTIFIER
 	);
-	// Falls back to FUNCTION_CALL for Java-like call-site coloring.
+	// Falls back to INSTANCE_METHOD for better contrast from plain identifiers across themes.
 	public static final TextAttributesKey	FUNCTION_CALL		= TextAttributesKey.createTextAttributesKey(
 	    "BOXLANG_FUNCTION_CALL",
-	    DefaultLanguageHighlighterColors.FUNCTION_CALL
+	    DefaultLanguageHighlighterColors.INSTANCE_METHOD
 	);
 	// Falls back to INSTANCE_METHOD for object method calls (for example, qb.from()).
 	public static final TextAttributesKey	METHOD_CALL			= TextAttributesKey.createTextAttributesKey(

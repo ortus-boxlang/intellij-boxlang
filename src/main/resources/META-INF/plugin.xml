@@ -128,6 +128,7 @@
     <gotoFileContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoFileContributor"/>
     <gotoClassContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoClassContributor"/>
     <gotoSymbolContributor implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoSymbolContributor"/>
+    <gotoDeclarationHandler implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangGotoDeclarationHandler"/>
     <searchEverywhereResultsEqualityProvider implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangSearchEqualityProvider"/>
     <directoryIndexExcludePolicy implementation="com.ortussolutions.intellijboxlang.navigation.BoxLangDirectoryIndexExcludePolicy"/>
 

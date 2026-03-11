@@ -114,6 +114,22 @@ public final class BoxLangLexerHighlightingTest extends BasePlatformTestCase {
 		);
 	}
 
+	public void testGenericFunctionCallInInterpolation() {
+		// Non-built-in calls inside interpolation should still highlight as function calls.
+		List<IElementType> tokens = lexTokens( "\"Result: #describe(x)#\"" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STRING,        // Opening quote "
+		    BoxLangTokenTypes.STRING,        // "Result: "
+		    BoxLangTokenTypes.HASH_SIGN,     // #
+		    BoxLangTokenTypes.FUNCTION_CALL, // describe
+		    BoxLangTokenTypes.PAREN,         // (
+		    BoxLangTokenTypes.IDENTIFIER,    // x
+		    BoxLangTokenTypes.PAREN,         // )
+		    BoxLangTokenTypes.HASH_SIGN,     // #
+		    BoxLangTokenTypes.STRING         // Closing quote "
+		);
+	}
+
 	// ── Documentation comments ─────────────────────────────────────────────
 
 	public void testDocCommentToken() {
@@ -682,6 +698,46 @@ public final class BoxLangLexerHighlightingTest extends BasePlatformTestCase {
 		    BoxLangTokenTypes.DOT,        // .
 		    BoxLangTokenTypes.IDENTIFIER, // List
 		    BoxLangTokenTypes.SEMICOLON   // ;
+		);
+	}
+
+	public void testParamKeywordStatement() {
+		List<IElementType> tokens = lexTokens( "param name = \"x\";" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.KEYWORD,    // param
+		    BoxLangTokenTypes.IDENTIFIER, // name
+		    BoxLangTokenTypes.OPERATOR,   // =
+		    BoxLangTokenTypes.STRING,     // "
+		    BoxLangTokenTypes.STRING,     // x
+		    BoxLangTokenTypes.STRING,     // "
+		    BoxLangTokenTypes.SEMICOLON   // ;
+		);
+	}
+
+	public void testFunctionParameterNamedParamIsIdentifier() {
+		List<IElementType> tokens = lexTokens( "function check( required struct param ) {}" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.STORAGE_TYPE,    // function
+		    BoxLangTokenTypes.FUNCTION_NAME,   // check
+		    BoxLangTokenTypes.PAREN,           // (
+		    BoxLangTokenTypes.STORAGE_MODIFIER,// required
+		    BoxLangTokenTypes.STORAGE_TYPE,    // struct
+		    BoxLangTokenTypes.IDENTIFIER,      // param
+		    BoxLangTokenTypes.PAREN,           // )
+		    BoxLangTokenTypes.BRACE,           // {
+		    BoxLangTokenTypes.BRACE            // }
+		);
+	}
+
+	public void testParamIdentifierWhenUsedForMethodChain() {
+		List<IElementType> tokens = lexTokens( "return param\n    .keyArray()" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.KEYWORD,       // return
+		    BoxLangTokenTypes.IDENTIFIER,    // param
+		    BoxLangTokenTypes.DOT,           // .
+		    BoxLangTokenTypes.FUNCTION_CALL, // keyArray
+		    BoxLangTokenTypes.PAREN,         // (
+		    BoxLangTokenTypes.PAREN          // )
 		);
 	}
 
