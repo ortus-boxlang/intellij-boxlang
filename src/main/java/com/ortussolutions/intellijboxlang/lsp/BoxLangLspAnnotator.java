@@ -58,6 +58,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 		List<Integer>	data		= tokens.getData();
 		List<String>	tokenTypes	= legend.getTokenTypes();
 		List<String>	tokenMods	= legend.getTokenModifiers();
+		CharSequence	source		= document.getCharsSequence();
 		int				line		= 0;
 		int				column		= 0;
 		for ( int i = 0; i + 4 < data.size(); i += 5 ) {
@@ -81,7 +82,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 
 			String				tokenType	= tokenTypeIndex < tokenTypes.size() ? tokenTypes.get( tokenTypeIndex ) : null;
 			Set<String>			modifiers	= decodeTokenModifiers( tokenModifier, tokenMods );
-			TextAttributesKey	key			= mapSemanticToken( tokenType, modifiers );
+			TextAttributesKey	key			= resolveSemanticToken( tokenType, modifiers, source, startOffset, endOffset );
 			if ( key == null ) {
 				continue;
 			}
@@ -104,6 +105,36 @@ public final class BoxLangLspAnnotator implements Annotator {
 			}
 		}
 		return modifiers.isEmpty() ? Set.of() : Set.copyOf( modifiers );
+	}
+
+	static TextAttributesKey resolveSemanticToken(
+	    String tokenType,
+	    Set<String> modifiers,
+	    CharSequence source,
+	    int startOffset,
+	    int endOffset ) {
+		if ( "modifier".equals( tokenType ) && isFollowedByStructKeyColon( source, endOffset ) ) {
+			return BoxLangTextAttributes.STRUCT_KEY;
+		}
+		return mapSemanticToken( tokenType, modifiers );
+	}
+
+	private static boolean isFollowedByStructKeyColon( CharSequence source, int endOffset ) {
+		if ( source == null || endOffset < 0 || endOffset > source.length() ) {
+			return false;
+		}
+		int index = endOffset;
+		while ( index < source.length() && Character.isWhitespace( source.charAt( index ) ) ) {
+			index++;
+		}
+		if ( index >= source.length() || source.charAt( index ) != ':' ) {
+			return false;
+		}
+		if ( index + 1 < source.length() ) {
+			char next = source.charAt( index + 1 );
+			return next != ':' && next != '=';
+		}
+		return true;
 	}
 
 	static TextAttributesKey mapSemanticToken( String tokenType, Set<String> modifiers ) {

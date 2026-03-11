@@ -254,6 +254,10 @@ public final class BoxLangLexer extends LexerBase {
 				tokenType				= BoxLangTokenTypes.STORAGE_TYPE;
 				// Track "function" keyword for function-name detection
 				lastWasFunctionKeyword	= "function".equals( lowerText );
+			} else if ( followedByColon && STORAGE_MODIFIERS.contains( lowerText ) ) {
+				// Storage-modifier words are valid struct keys when followed by :
+				tokenType				= BoxLangTokenTypes.STRUCT_KEY;
+				lastWasFunctionKeyword	= false;
 			} else if ( STORAGE_MODIFIERS.contains( lowerText ) ) {
 				tokenType = BoxLangTokenTypes.STORAGE_MODIFIER;
 				// Don't reset lastWasFunctionKeyword — modifiers can precede function names

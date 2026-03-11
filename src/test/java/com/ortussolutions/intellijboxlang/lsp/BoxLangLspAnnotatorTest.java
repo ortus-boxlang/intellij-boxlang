@@ -35,6 +35,40 @@ public class BoxLangLspAnnotatorTest extends TestCase {
 		);
 	}
 
+	public void testResolveSemanticToken_mapsModifierFollowedByColonAsStructKey() {
+		String	source	= "{ required: true }";
+		int		start	= source.indexOf( "required" );
+		int		end		= start + "required".length();
+
+		assertSame(
+		    BoxLangTextAttributes.STRUCT_KEY,
+		    BoxLangLspAnnotator.resolveSemanticToken(
+		        "modifier",
+		        Set.of(),
+		        source,
+		        start,
+		        end
+		    )
+		);
+	}
+
+	public void testResolveSemanticToken_keepsModifierWithoutColonAsStorageModifier() {
+		String	source	= "public function test() {}";
+		int		start	= source.indexOf( "public" );
+		int		end		= start + "public".length();
+
+		assertSame(
+		    BoxLangTextAttributes.STORAGE_MODIFIER,
+		    BoxLangLspAnnotator.resolveSemanticToken(
+		        "modifier",
+		        Set.of(),
+		        source,
+		        start,
+		        end
+		    )
+		);
+	}
+
 	public void testDecodeTokenModifiers_decodesLegendBits() {
 		Set<String> modifiers = BoxLangLspAnnotator.decodeTokenModifiers(
 		    0b101,

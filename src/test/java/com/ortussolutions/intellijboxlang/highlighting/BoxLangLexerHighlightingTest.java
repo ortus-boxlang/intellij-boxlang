@@ -702,6 +702,17 @@ public final class BoxLangLexerHighlightingTest extends BasePlatformTestCase {
 		);
 	}
 
+	public void testStructLiteralWithRequiredKey() {
+		List<IElementType> tokens = lexTokens( "{ required: true }" );
+		assertTokenSequence( tokens,
+		    BoxLangTokenTypes.BRACE,      // {
+		    BoxLangTokenTypes.STRUCT_KEY, // required
+		    BoxLangTokenTypes.OPERATOR,   // :
+		    BoxLangTokenTypes.CONSTANT,   // true
+		    BoxLangTokenTypes.BRACE       // }
+		);
+	}
+
 	public void testIsNullBifCall() {
 		List<IElementType> tokens = lexTokens( "isNull(x)" );
 		assertTokenSequence( tokens,
