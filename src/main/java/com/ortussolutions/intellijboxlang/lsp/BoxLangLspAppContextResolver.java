@@ -45,9 +45,6 @@ public final class BoxLangLspAppContextResolver {
 	    "cfm"
 	);
 	private static final Pattern		SINGLE_QUOTED_REFERENCE_PATTERN						= Pattern.compile( "'([^']+)'" );
-	private static final Pattern		REGISTER_MAPPING_PATTERN							= Pattern.compile(
-	    "(?is)registerMapping\\s*\\(\\s*(['\"])([^'\"]+)\\1\\s*,\\s*((?:[^()]+|\\([^()]*\\))*)\\)"
-	);
 	private static final Pattern		MAPPING_INDEX_ASSIGN_PATTERN						= Pattern.compile(
 	    "(?is)this\\.mappings\\s*\\[\\s*(['\"])([^'\"]+)\\1\\s*\\]\\s*=\\s*([^;\\n]+)"
 	);
@@ -65,9 +62,6 @@ public final class BoxLangLspAppContextResolver {
 	);
 	private static final Pattern		VARIABLE_ASSIGN_PATTERN								= Pattern.compile(
 	    "(?is)(?:^|[;\\n\\r])\\s*(?:var\\s+)?((?:this|variables|local|request|application|server|session)\\.[A-Za-z_][A-Za-z0-9_]*|[A-Za-z_][A-Za-z0-9_]*)\\s*=\\s*([^;\\n\\r]+)"
-	);
-	private static final Pattern		REGISTER_MODULE_DIR_PATTERN							= Pattern.compile(
-	    "(?is)registerModuleDirectory\\s*\\(\\s*((?:[^()]+|\\([^()]*\\))*)\\)"
 	);
 	private static final Pattern		MODULE_DIR_ASSIGN_PATTERN							= Pattern.compile(
 	    "(?is)this\\.(?:moduleDirectory|modulesDirectory|moduleDirectories|modulesDirectories|moduleDirs)\\s*=\\s*([^;\\n]+)"
@@ -89,6 +83,10 @@ public final class BoxLangLspAppContextResolver {
 	);
 	private static final Pattern		STRING_LITERAL_PATTERN								= Pattern.compile(
 	    "(['\"])([^'\"]+)\\1"
+	);
+	private static final Set<String>	KNOWN_MODULE_DIRECTORY_NAMES						= Set.of(
+	    "modules",
+	    "modules_app"
 	);
 
 	public BoxLangLspAppContext resolve( Project project, @Nullable VirtualFile file, @Nullable String manualModules ) {
@@ -204,7 +202,24 @@ public final class BoxLangLspAppContextResolver {
 			return true;
 		}
 		String extension = extension( fileName );
-		return BOXLANG_EXTENSIONS.contains( extension ) && path.toString().toLowerCase( Locale.ROOT ).contains( "module" );
+		if ( !BOXLANG_EXTENSIONS.contains( extension ) ) {
+			return false;
+		}
+		if ( fileName.startsWith( "application." ) || fileName.startsWith( "moduleconfig." ) ) {
+			return true;
+		}
+		return isInKnownModuleDirectory( path );
+	}
+
+	private static boolean isInKnownModuleDirectory( Path path ) {
+		Path normalized = path.toAbsolutePath().normalize();
+		for ( int i = 0; i < normalized.getNameCount(); i++ ) {
+			String segment = normalized.getName( i ).toString().toLowerCase( Locale.ROOT );
+			if ( KNOWN_MODULE_DIRECTORY_NAMES.contains( segment ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static boolean isExtendsOrImplementsDiagnostic( Diagnostic diagnostic ) {
@@ -263,13 +278,13 @@ public final class BoxLangLspAppContextResolver {
 		return fallback;
 	}
 
-	static List<Path> parseManualModuleDirectories( @Nullable String manualModules, Path appRoot, Path sourceDirectory ) {
+	static List<Path> parseManualModuleDirectories( @Nullable String manualModules, Path sourceDirectory, Path resolutionRoot ) {
 		if ( manualModules == null || manualModules.isBlank() ) {
 			return List.of();
 		}
 		List<Path> paths = new ArrayList<>();
 		for ( String token : manualModules.split( "[,\\n;]" ) ) {
-			Path resolved = toResolvedPath( token, sourceDirectory, appRoot );
+			Path resolved = toResolvedPath( token, sourceDirectory, resolutionRoot );
 			if ( resolved != null ) {
 				paths.add( resolved );
 			}
@@ -458,10 +473,17 @@ public final class BoxLangLspAppContextResolver {
 	}
 
 	private static List<MappingCandidate> extractMappingCandidates( String text ) {
-		List<MappingCandidate>	candidates		= new ArrayList<>();
-		Matcher					registerMatcher	= REGISTER_MAPPING_PATTERN.matcher( text );
-		while ( registerMatcher.find() ) {
-			candidates.add( new MappingCandidate( registerMatcher.group( 2 ), registerMatcher.group( 3 ) ) );
+		List<MappingCandidate> candidates = new ArrayList<>();
+		for ( String argumentsText : extractFunctionCallArguments( text, "registerMapping" ) ) {
+			List<String> callArguments = splitTopLevelArguments( argumentsText );
+			if ( callArguments.size() < 2 ) {
+				continue;
+			}
+			String aliasLiteral = extractQuotedLiteral( callArguments.get( 0 ) );
+			if ( aliasLiteral == null || aliasLiteral.isBlank() ) {
+				continue;
+			}
+			candidates.add( new MappingCandidate( aliasLiteral, callArguments.get( 1 ) ) );
 		}
 		Matcher indexedAssignmentMatcher = MAPPING_INDEX_ASSIGN_PATTERN.matcher( text );
 		while ( indexedAssignmentMatcher.find() ) {
@@ -479,10 +501,14 @@ public final class BoxLangLspAppContextResolver {
 	}
 
 	private static List<String> extractModuleDirectoryExpressions( String text ) {
-		List<String>	expressions		= new ArrayList<>();
-		Matcher			registerMatcher	= REGISTER_MODULE_DIR_PATTERN.matcher( text );
-		while ( registerMatcher.find() ) {
-			expressions.add( registerMatcher.group( 1 ) );
+		List<String> expressions = new ArrayList<>();
+		for ( String argumentsText : extractFunctionCallArguments( text, "registerModuleDirectory" ) ) {
+			List<String> callArguments = splitTopLevelArguments( argumentsText );
+			for ( String argument : callArguments ) {
+				if ( argument != null && !argument.isBlank() ) {
+					expressions.add( argument );
+				}
+			}
 		}
 		Matcher assignMatcher = MODULE_DIR_ASSIGN_PATTERN.matcher( text );
 		while ( assignMatcher.find() ) {
@@ -735,6 +761,173 @@ public final class BoxLangLspAppContextResolver {
 			return null;
 		}
 		return expression.substring( firstParen + 1, expression.length() - 1 ).trim();
+	}
+
+	private static @Nullable String extractQuotedLiteral( @Nullable String expression ) {
+		if ( expression == null ) {
+			return null;
+		}
+		Matcher matcher = SINGLE_QUOTED_OR_DOUBLE_QUOTED_EXPRESSION_PATTERN.matcher( expression.trim() );
+		if ( !matcher.matches() ) {
+			return null;
+		}
+		return matcher.group( 2 );
+	}
+
+	private static List<String> extractFunctionCallArguments( String text, String functionName ) {
+		if ( text == null || text.isBlank() || functionName == null || functionName.isBlank() ) {
+			return List.of();
+		}
+		List<String>	arguments	= new ArrayList<>();
+		int				index		= 0;
+		int				length		= text.length();
+		while ( index < length ) {
+			int callStart = indexOfIgnoreCase( text, functionName, index );
+			if ( callStart < 0 ) {
+				break;
+			}
+			if ( callStart > 0 && isIdentifierChar( text.charAt( callStart - 1 ) ) ) {
+				index = callStart + functionName.length();
+				continue;
+			}
+
+			int cursor = callStart + functionName.length();
+			while ( cursor < length && Character.isWhitespace( text.charAt( cursor ) ) ) {
+				cursor++;
+			}
+			if ( cursor >= length || text.charAt( cursor ) != '(' ) {
+				index = callStart + functionName.length();
+				continue;
+			}
+
+			int		depth			= 1;
+			char	quote			= 0;
+			int		argumentsStart	= cursor + 1;
+			boolean	matched			= false;
+			for ( int i = argumentsStart; i < length; i++ ) {
+				char c = text.charAt( i );
+				if ( quote != 0 ) {
+					if ( c == '\\' && i + 1 < length ) {
+						i++;
+						continue;
+					}
+					if ( c == quote ) {
+						quote = 0;
+					}
+					continue;
+				}
+				if ( c == '\'' || c == '"' ) {
+					quote = c;
+					continue;
+				}
+				if ( c == '(' ) {
+					depth++;
+					continue;
+				}
+				if ( c == ')' ) {
+					depth--;
+					if ( depth == 0 ) {
+						arguments.add( text.substring( argumentsStart, i ) );
+						index	= i + 1;
+						matched	= true;
+						break;
+					}
+				}
+			}
+			if ( !matched ) {
+				break;
+			}
+		}
+		return arguments;
+	}
+
+	private static List<String> splitTopLevelArguments( String argumentsText ) {
+		if ( argumentsText == null || argumentsText.isBlank() ) {
+			return List.of();
+		}
+		List<String>	parts			= new ArrayList<>();
+		StringBuilder	current			= new StringBuilder();
+		int				parenDepth		= 0;
+		int				bracketDepth	= 0;
+		int				braceDepth		= 0;
+		char			quote			= 0;
+		for ( int i = 0; i < argumentsText.length(); i++ ) {
+			char c = argumentsText.charAt( i );
+			if ( quote != 0 ) {
+				current.append( c );
+				if ( c == '\\' && i + 1 < argumentsText.length() ) {
+					current.append( argumentsText.charAt( ++i ) );
+					continue;
+				}
+				if ( c == quote ) {
+					quote = 0;
+				}
+				continue;
+			}
+			if ( c == '\'' || c == '"' ) {
+				quote = c;
+				current.append( c );
+				continue;
+			}
+			if ( c == '(' ) {
+				parenDepth++;
+				current.append( c );
+				continue;
+			}
+			if ( c == ')' ) {
+				parenDepth = Math.max( 0, parenDepth - 1 );
+				current.append( c );
+				continue;
+			}
+			if ( c == '[' ) {
+				bracketDepth++;
+				current.append( c );
+				continue;
+			}
+			if ( c == ']' ) {
+				bracketDepth = Math.max( 0, bracketDepth - 1 );
+				current.append( c );
+				continue;
+			}
+			if ( c == '{' ) {
+				braceDepth++;
+				current.append( c );
+				continue;
+			}
+			if ( c == '}' ) {
+				braceDepth = Math.max( 0, braceDepth - 1 );
+				current.append( c );
+				continue;
+			}
+			if ( c == ',' && parenDepth == 0 && bracketDepth == 0 && braceDepth == 0 ) {
+				String part = current.toString().trim();
+				if ( !part.isBlank() ) {
+					parts.add( part );
+				}
+				current.setLength( 0 );
+				continue;
+			}
+			current.append( c );
+		}
+		String finalPart = current.toString().trim();
+		if ( !finalPart.isBlank() ) {
+			parts.add( finalPart );
+		}
+		return parts;
+	}
+
+	private static int indexOfIgnoreCase( String text, String needle, int fromIndex ) {
+		int max = text.length() - needle.length();
+		for ( int i = Math.max( 0, fromIndex ); i <= max; i++ ) {
+			if ( text.regionMatches( true, i, needle, 0, needle.length() ) ) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	private static boolean isIdentifierChar( char value ) {
+		return Character.isLetterOrDigit( value ) || value == '_' || value == '$';
 	}
 
 	private static void storeVariableValue( Map<String, String> knownVariables, String name, String value ) {

@@ -290,12 +290,12 @@ public final class BoxLangLspClientService {
 
 	public List<Location> requestDefinition( VirtualFile file, Document document, int offset ) {
 		if ( !ensureServerForFile( file ) ) {
-			LOG.info( "Skipping definition request: LSP server unavailable for " + ( file != null ? file.getPath() : "<null>" ) );
+			LOG.debug( "Skipping definition request: LSP server unavailable for " + ( file != null ? file.getPath() : "<null>" ) );
 			return List.of();
 		}
 		BoxLangLspAppContext context = activeAppContext;
 		if ( context != null ) {
-			LOG.info(
+			LOG.debug(
 			    "Definition request app context: root=" + context.appRoot()
 			        + ", mappings=" + context.mappings().size()
 			        + ", moduleDirs=" + context.moduleDirectories().size()
@@ -314,7 +314,7 @@ public final class BoxLangLspClientService {
 			var				result		= server.getTextDocumentService().definition( params )
 			    .get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
 			List<Location>	locations	= flattenDefinitionResult( result );
-			LOG.info(
+			LOG.debug(
 			    "LSP definition result: uri='" + uri + "', offset=" + offset + ", count=" + locations.size()
 			);
 			return locations;
@@ -643,6 +643,11 @@ public final class BoxLangLspClientService {
 		return resolveAppContext( file, settings );
 	}
 
+	@Nullable
+	BoxLangLspAppContext getActiveAppContext() {
+		return activeAppContext;
+	}
+
 	boolean shouldSuppressMappedReferenceDiagnostic( @Nullable VirtualFile file, org.eclipse.lsp4j.Diagnostic diagnostic ) {
 		if ( !BoxLangLspAppContextResolver.isExtendsOrImplementsDiagnostic( diagnostic ) ) {
 			return false;
@@ -740,7 +745,14 @@ public final class BoxLangLspClientService {
 	}
 
 	private List<WorkspaceFolder> getWorkspaceFolders( BoxLangLspAppContext appContext ) {
-		String uri = appContext.appRoot().toUri().toString();
+		String basePath = project.getBasePath();
+		if ( basePath == null || basePath.isBlank() ) {
+			return List.of();
+		}
+		Path	workspaceRoot	= appContext != null && appContext.appRoot() != null
+		    ? appContext.appRoot()
+		    : Path.of( basePath ).toAbsolutePath().normalize();
+		String	uri				= workspaceRoot.toUri().toString();
 		return List.of( new WorkspaceFolder( uri, project.getName() ) );
 	}
 

@@ -300,6 +300,40 @@ public class BoxLangLspAppContextResolverTest extends TestCase {
 		}
 	}
 
+	public void testParseManualModuleDirectories_resolvesLeadingSlashAgainstResolutionRoot() throws IOException {
+		Path projectRoot = Files.createTempDirectory( "boxlang-lsp-manual-modules-root" );
+		try {
+			Path appRoot = projectRoot.resolve( "app" );
+			Files.createDirectories( appRoot );
+			Files.createDirectories( projectRoot.resolve( "modules_manual" ) );
+
+			List<Path> parsed = BoxLangLspAppContextResolver.parseManualModuleDirectories(
+			    "/modules_manual",
+			    appRoot,
+			    projectRoot
+			);
+
+			assertEquals( 1, parsed.size() );
+			assertEquals( projectRoot.resolve( "modules_manual" ).toAbsolutePath().normalize(), parsed.getFirst() );
+		} finally {
+			deleteRecursively( projectRoot );
+		}
+	}
+
+	public void testIsContextRelevantPath_usesKnownModuleDirectoryHeuristics() {
+		BoxLangLspAppContextResolver resolver = new BoxLangLspAppContextResolver();
+
+		assertFalse(
+		    resolver.isContextRelevantPath( Path.of( "/tmp/project/modelutilities/MyThing.cfc" ) )
+		);
+		assertTrue(
+		    resolver.isContextRelevantPath( Path.of( "/tmp/project/modules/my-module/ModuleConfig.cfc" ) )
+		);
+		assertTrue(
+		    resolver.isContextRelevantPath( Path.of( "/tmp/project/modules_app/my-module/models/Service.cfc" ) )
+		);
+	}
+
 	private static void deleteRecursively( Path root ) throws IOException {
 		if ( root == null || !Files.exists( root ) ) {
 			return;

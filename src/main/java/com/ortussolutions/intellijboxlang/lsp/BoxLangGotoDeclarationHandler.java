@@ -77,9 +77,12 @@ public final class BoxLangGotoDeclarationHandler implements GotoDeclarationHandl
 	    VirtualFile sourceVirtualFile,
 	    Document sourceDocument,
 	    int offset ) {
-		BoxLangLspAppContext	context		= service.getAppContextForFile( sourceVirtualFile );
 		List<Location>			locations	= service.requestDefinition( sourceVirtualFile, sourceDocument, offset );
+		BoxLangLspAppContext	context		= service.getActiveAppContext();
 		if ( locations.isEmpty() ) {
+			if ( context == null ) {
+				context = service.getAppContextForFile( sourceVirtualFile );
+			}
 			PsiElement[] mappedFallbackTargets = resolveMappedFallbackTargets( project, context, sourceDocument, offset );
 			if ( mappedFallbackTargets.length > 0 ) {
 				LOG.info(
