@@ -179,6 +179,9 @@ public final class BoxLangLspAnnotator implements Annotator {
 			if ( diagnostic.getRange() == null ) {
 				continue;
 			}
+			if ( lspService.shouldSuppressMappedReferenceDiagnostic( psiFile.getVirtualFile(), diagnostic ) ) {
+				continue;
+			}
 			int	startOffset	= offsetFor( document, diagnostic.getRange().getStart().getLine(), diagnostic.getRange().getStart().getCharacter() );
 			int	endOffset	= offsetFor( document, diagnostic.getRange().getEnd().getLine(), diagnostic.getRange().getEnd().getCharacter() );
 			if ( startOffset >= endOffset ) {
