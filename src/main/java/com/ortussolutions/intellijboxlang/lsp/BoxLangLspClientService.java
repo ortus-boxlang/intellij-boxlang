@@ -11,6 +11,9 @@ import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.newvfs.BulkFileListener;
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
@@ -32,10 +35,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.eclipse.lsp4j.ClientCapabilities;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensCapabilities;
 import org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequests;
@@ -100,6 +108,7 @@ public final class BoxLangLspClientService {
 	);
 
 	private final Project											project;
+	private final BoxLangLspAppContextResolver						appContextResolver					= new BoxLangLspAppContextResolver();
 	private final Map<String, Integer>								documentVersions					= new ConcurrentHashMap<>();
 	private final Map<String, Long>									documentStamps						= new ConcurrentHashMap<>();
 	private final Map<String, CachedTokens>							tokenCache							= new ConcurrentHashMap<>();
@@ -117,6 +126,8 @@ public final class BoxLangLspClientService {
 	private Socket													socket;
 	private LanguageServer											server;
 	private SemanticTokensLegend									legend;
+	private volatile BoxLangLspAppContext							activeAppContext;
+	private volatile boolean										appContextDirty						= true;
 
 	public BoxLangLspClientService( Project project ) {
 		this.project = project;
@@ -128,6 +139,21 @@ public final class BoxLangLspClientService {
 				VirtualFile file = FileDocumentManager.getInstance().getFile( document );
 				if ( file != null && isBoxLangFile( file ) ) {
 					notifyDidSave( file, document );
+				}
+				if ( appContextResolver.isContextRelevantFile( file ) ) {
+					markAppContextDirty();
+				}
+			}
+		} );
+		connection.subscribe( VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
+
+			@Override
+			public void after( List<? extends VFileEvent> events ) {
+				for ( VFileEvent event : events ) {
+					if ( appContextResolver.isContextRelevantPath( event.getPath() ) ) {
+						markAppContextDirty();
+						return;
+					}
 				}
 			}
 		} );
@@ -142,7 +168,7 @@ public final class BoxLangLspClientService {
 	}
 
 	public SemanticTokens requestSemanticTokens( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			LOG.info( "Skipping semantic tokens request: LSP server not started yet" );
 			return null;
 		}
@@ -192,7 +218,7 @@ public final class BoxLangLspClientService {
 
 	@SuppressWarnings( "deprecation" )
 	public List<org.eclipse.lsp4j.WorkspaceSymbol> requestWorkspaceSymbols( String query ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( null ) ) {
 			return List.of();
 		}
 		if ( !workspaceSymbolsSupported ) {
@@ -237,7 +263,7 @@ public final class BoxLangLspClientService {
 	}
 
 	public List<org.eclipse.lsp4j.DocumentSymbol> requestDocumentSymbols( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return List.of();
 		}
 		String uri = safeToUri( file );
@@ -260,6 +286,47 @@ public final class BoxLangLspClientService {
 			LOG.debug( "Failed to request document symbols", e );
 			return List.of();
 		}
+	}
+
+	public List<Location> requestDefinition( VirtualFile file, Document document, int offset ) {
+		if ( !ensureServerForFile( file ) ) {
+			LOG.info( "Skipping definition request: LSP server unavailable for " + ( file != null ? file.getPath() : "<null>" ) );
+			return List.of();
+		}
+		BoxLangLspAppContext context = activeAppContext;
+		if ( context != null ) {
+			LOG.info(
+			    "Definition request app context: root=" + context.appRoot()
+			        + ", mappings=" + context.mappings().size()
+			        + ", moduleDirs=" + context.moduleDirectories().size()
+			        + ", hash=" + context.contextHash()
+			);
+		}
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return List.of();
+		}
+		syncDocument( uri, document );
+		DefinitionParams params = new DefinitionParams();
+		params.setTextDocument( new TextDocumentIdentifier( uri ) );
+		params.setPosition( offsetToPosition( document, offset ) );
+		try {
+			var				result		= server.getTextDocumentService().definition( params )
+			    .get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
+			List<Location>	locations	= flattenDefinitionResult( result );
+			LOG.info(
+			    "LSP definition result: uri='" + uri + "', offset=" + offset + ", count=" + locations.size()
+			);
+			return locations;
+		} catch ( Exception e ) {
+			logLspRequestFailure( "textDocument/definition", "uri='" + uri + "', offset=" + offset, e );
+			return List.of();
+		}
+	}
+
+	private boolean ensureServerForFile( @Nullable VirtualFile file ) {
+		refreshAppContextIfNeeded( file );
+		return ensureStarted();
 	}
 
 	private boolean ensureStarted() {
@@ -322,12 +389,16 @@ public final class BoxLangLspClientService {
 			// LSP is not available yet (prompt was shown if applicable); skip startup quietly.
 			return;
 		}
-		int					port		= allocatePort();
+		int						port		= allocatePort();
+		BoxLangLspAppContext	appContext	= resolveAppContext( null, settings );
 
-		GeneralCommandLine	commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
+		GeneralCommandLine		commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
 		commandLine.withCharset( StandardCharsets.UTF_8 );
 		commandLine.withEnvironment( "BOXLANG_HOME", bootstrap.lspBoxLangHome.toString() );
-		commandLine.withEnvironment( "BOXLANG_MODULESDIRECTORY", bootstrap.lspModulePath.toString() );
+		commandLine.withEnvironment(
+		    "BOXLANG_MODULESDIRECTORY",
+		    toModulesDirectoryEnv( mergeModuleDirectories( bootstrap.lspModulePath, appContext.moduleDirectories() ) )
+		);
 		commandLine.withEnvironment( "CLASSPATH", bootstrap.boxLangJarPath.toString() );
 		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
 			commandLine.withEnvironment( "JAVA_HOME", settings.javaHome );
@@ -346,7 +417,7 @@ public final class BoxLangLspClientService {
 		server = launcher.getRemoteProxy();
 		launcher.startListening();
 
-		InitializeResult result = server.initialize( createInitializeParams() )
+		InitializeResult result = server.initialize( createInitializeParams( appContext ) )
 		    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
 		legend					= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
 		    ? result.getCapabilities().getSemanticTokensProvider().getLegend()
@@ -364,11 +435,12 @@ public final class BoxLangLspClientService {
 		server.initialized( new InitializedParams() );
 	}
 
-	private InitializeParams createInitializeParams() {
+	private InitializeParams createInitializeParams( BoxLangLspAppContext appContext ) {
 		InitializeParams params = new InitializeParams();
-		params.setWorkspaceFolders( getWorkspaceFolders() );
+		params.setWorkspaceFolders( getWorkspaceFolders( appContext ) );
 		params.setCapabilities( createClientCapabilities() );
 		params.setProcessId( ( int ) ProcessHandle.current().pid() );
+		params.setInitializationOptions( appContext.toInitializeOptions() );
 		return params;
 	}
 
@@ -388,6 +460,202 @@ public final class BoxLangLspClientService {
 		textDocument.setSemanticTokens( semanticTokens );
 		capabilities.setTextDocument( textDocument );
 		return capabilities;
+	}
+
+	private void refreshAppContextIfNeeded( @Nullable VirtualFile file ) {
+		BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve( project );
+		resolveAppContext( file, settings );
+	}
+
+	private BoxLangLspAppContext resolveAppContext( @Nullable VirtualFile file, BoxLangResolvedSettings settings ) {
+		synchronized ( startLock ) {
+			boolean					needsRefresh	= activeAppContext == null || appContextDirty || shouldRefreshForFile( file, activeAppContext );
+			BoxLangLspAppContext	current			= activeAppContext;
+			if ( !needsRefresh && current != null ) {
+				return current;
+			}
+			BoxLangLspAppContext	resolved	= appContextResolver.resolve( project, file, settings.lspModules );
+			boolean					changed		= hasContextChanged( current, resolved );
+			activeAppContext	= resolved;
+			appContextDirty		= false;
+			if ( changed && server != null ) {
+				LOG.info( "Restarting BoxLang LSP due to app context hash change: " + resolved.contextHash() );
+				stopServer();
+				requestEditorRehighlight();
+			}
+			return resolved;
+		}
+	}
+
+	private boolean shouldRefreshForFile( @Nullable VirtualFile file, BoxLangLspAppContext context ) {
+		if ( file == null ) {
+			return false;
+		}
+		try {
+			Path	filePath	= file.toNioPath().toAbsolutePath().normalize();
+			Path	currentRoot	= context.appRoot() != null ? context.appRoot().toAbsolutePath().normalize() : null;
+			Path	projectRoot	= project.getBasePath() != null ? Path.of( project.getBasePath() ).toAbsolutePath().normalize() : null;
+			Path	nearestRoot	= BoxLangLspAppContextResolver.findNearestApplicationRoot( filePath, projectRoot );
+			if ( currentRoot == null ) {
+				return true;
+			}
+			return nearestRoot == null
+			    ? !filePath.startsWith( currentRoot )
+			    : !nearestRoot.toAbsolutePath().normalize().equals( currentRoot );
+		} catch ( RuntimeException ignored ) {
+			return false;
+		}
+	}
+
+	private void markAppContextDirty() {
+		appContextDirty = true;
+	}
+
+	private void stopServer() {
+		LanguageServer	previousServer	= server;
+		Process			previousProcess	= process;
+		Socket			previousSocket	= socket;
+
+		server							= null;
+		process							= null;
+		socket							= null;
+		legend							= null;
+		diagnosticPullSupported			= false;
+		semanticTokensSupported			= false;
+		workspaceSymbolsSupported		= false;
+		workspaceSymbolsDisabledLogged	= false;
+		documentVersions.clear();
+		documentStamps.clear();
+		tokenCache.clear();
+		symbolCache.clear();
+		diagnostics.clear();
+
+		if ( previousServer != null ) {
+			try {
+				previousServer.shutdown();
+			} catch ( Exception e ) {
+				LOG.debug( "Failed to shutdown previous BoxLang LSP server cleanly", e );
+			}
+			try {
+				previousServer.exit();
+			} catch ( Exception e ) {
+				LOG.debug( "Failed to send exit to previous BoxLang LSP server", e );
+			}
+		}
+		if ( previousSocket != null ) {
+			try {
+				previousSocket.close();
+			} catch ( IOException e ) {
+				LOG.debug( "Failed to close previous BoxLang LSP socket", e );
+			}
+		}
+		if ( previousProcess != null ) {
+			previousProcess.destroy();
+		}
+	}
+
+	static List<Path> mergeModuleDirectories( Path lspModulesPath, List<Path> appModuleDirectories ) {
+		List<Path>						merged	= new ArrayList<>();
+		java.util.LinkedHashSet<Path>	dedupe	= new java.util.LinkedHashSet<>();
+		if ( lspModulesPath != null ) {
+			dedupe.add( lspModulesPath.toAbsolutePath().normalize() );
+		}
+		if ( appModuleDirectories != null ) {
+			for ( Path dir : appModuleDirectories ) {
+				if ( dir != null ) {
+					dedupe.add( dir.toAbsolutePath().normalize() );
+				}
+			}
+		}
+		merged.addAll( dedupe );
+		return merged;
+	}
+
+	static String toModulesDirectoryEnv( List<Path> moduleDirectories ) {
+		if ( moduleDirectories == null || moduleDirectories.isEmpty() ) {
+			return "";
+		}
+		return moduleDirectories.stream()
+		    .map( path -> path.toAbsolutePath().normalize().toString() )
+		    .distinct()
+		    .collect( Collectors.joining( "," ) );
+	}
+
+	static boolean hasContextChanged( @Nullable BoxLangLspAppContext current, @Nullable BoxLangLspAppContext next ) {
+		if ( current == null && next == null ) {
+			return false;
+		}
+		if ( current == null || next == null ) {
+			return true;
+		}
+		return !current.contextHash().equals( next.contextHash() );
+	}
+
+	static Position offsetToPosition( Document document, int offset ) {
+		if ( document == null ) {
+			return new Position( 0, 0 );
+		}
+		int	clampedOffset	= Math.max( 0, Math.min( offset, document.getTextLength() ) );
+		int	line			= document.getLineNumber( clampedOffset );
+		int	lineStart		= document.getLineStartOffset( line );
+		return new Position( line, Math.max( 0, clampedOffset - lineStart ) );
+	}
+
+	static int positionToOffset( Document document, @Nullable Position position ) {
+		if ( document == null || position == null || document.getLineCount() == 0 ) {
+			return 0;
+		}
+		int	line		= Math.max( 0, Math.min( position.getLine(), document.getLineCount() - 1 ) );
+		int	lineStart	= document.getLineStartOffset( line );
+		int	lineEnd		= document.getLineEndOffset( line );
+		int	column		= Math.max( 0, position.getCharacter() );
+		return Math.min( lineStart + column, lineEnd );
+	}
+
+	static List<Location> flattenDefinitionResult(
+	    @Nullable Either<List<? extends Location>, List<? extends LocationLink>> result ) {
+		if ( result == null ) {
+			return List.of();
+		}
+		if ( result.isLeft() ) {
+			return result.getLeft() == null ? List.of() : List.copyOf( result.getLeft() );
+		}
+		List<? extends LocationLink> links = result.getRight();
+		if ( links == null || links.isEmpty() ) {
+			return List.of();
+		}
+		List<Location> locations = new ArrayList<>( links.size() );
+		for ( LocationLink link : links ) {
+			if ( link == null || link.getTargetUri() == null || link.getTargetUri().isBlank() ) {
+				continue;
+			}
+			Location location = new Location();
+			location.setUri( link.getTargetUri() );
+			location.setRange( link.getTargetSelectionRange() != null ? link.getTargetSelectionRange() : link.getTargetRange() );
+			locations.add( location );
+		}
+		return locations;
+	}
+
+	@Nullable
+	BoxLangLspAppContext getAppContextForFile( @Nullable VirtualFile file ) {
+		BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve( project );
+		return resolveAppContext( file, settings );
+	}
+
+	boolean shouldSuppressMappedReferenceDiagnostic( @Nullable VirtualFile file, org.eclipse.lsp4j.Diagnostic diagnostic ) {
+		if ( !BoxLangLspAppContextResolver.isExtendsOrImplementsDiagnostic( diagnostic ) ) {
+			return false;
+		}
+		String classReference = BoxLangLspAppContextResolver.extractClassReference( diagnostic );
+		if ( classReference == null || classReference.isBlank() ) {
+			return false;
+		}
+		BoxLangLspAppContext context = getAppContextForFile( file );
+		if ( context == null ) {
+			return false;
+		}
+		return appContextResolver.canResolveMappedClassReference( context, classReference );
 	}
 
 	private void syncDocument( String uri, Document document ) {
@@ -471,12 +739,8 @@ public final class BoxLangLspClientService {
 		return args;
 	}
 
-	private List<WorkspaceFolder> getWorkspaceFolders() {
-		String basePath = project.getBasePath();
-		if ( basePath == null ) {
-			return List.of();
-		}
-		String uri = Path.of( basePath ).toUri().toString();
+	private List<WorkspaceFolder> getWorkspaceFolders( BoxLangLspAppContext appContext ) {
+		String uri = appContext.appRoot().toUri().toString();
 		return List.of( new WorkspaceFolder( uri, project.getName() ) );
 	}
 
@@ -497,7 +761,7 @@ public final class BoxLangLspClientService {
 	}
 
 	public List<org.eclipse.lsp4j.Diagnostic> requestDiagnostics( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return List.of();
 		}
 		String uri = safeToUri( file );
@@ -523,7 +787,7 @@ public final class BoxLangLspClientService {
 	}
 
 	private void notifyDidSave( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return;
 		}
 		String uri = safeToUri( file );
