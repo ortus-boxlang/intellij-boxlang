@@ -14,14 +14,11 @@ import com.ortussolutions.intellijboxlang.settings.VersionPickerDialog;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangPromptService {
 
-	private static final String	NOTIFICATION_GROUP_ID	= "BoxLang";
-	private static final long	TIMEOUT_SECONDS			= 60;
+	private static final String NOTIFICATION_GROUP_ID = "BoxLang";
 
 	private BoxLangPromptService() {
 	}
@@ -74,22 +71,17 @@ public final class BoxLangPromptService {
 							ApplicationManager.getApplication().invokeLater( () -> {
 								String selected = VersionPickerDialog.showAndGetVersion( project, moduleName, versions );
 								if ( selected != null ) {
-									// Run download as a background task with progress
-									ProgressManager.getInstance().run( new Task.Backgroundable( project, "Downloading " + moduleName, true ) {
-
-										@Override
-										public void run( @NotNull ProgressIndicator indicator ) {
-											try {
-												downloadAction.download( selected, indicator );
-											} catch ( IOException ex ) {
-												// Logged by the caller
-											}
-										}
-									} );
+									BoxLangSetupTasks.download( project, moduleName,
+									    indicator -> downloadAction.download( selected, indicator ),
+									    () -> {
+										    if ( project != null && !project.isDisposed() )
+											    com.ortussolutions.intellijboxlang.lsp.BoxLangLspClientService.getInstance( project ).retryStartup();
+									    } );
 								}
 							} );
 						} catch ( IOException ex ) {
-							// Version fetch failed - silently ignore
+							BoxLangSetupTasks.reportFailure( project, "Fetching " + moduleName + " versions", ex,
+							    () -> promptAndDownload( project, title, message, moduleName, versionFetcher, downloadAction ) );
 						}
 					} );
 				}
@@ -107,46 +99,53 @@ public final class BoxLangPromptService {
 		} );
 	}
 
-	public static boolean confirmDownload( Project project, String title, String message ) {
-		CompletableFuture<Boolean> result = new CompletableFuture<>();
-
+	public static void promptDownload( Project project, String title, String message, Runnable download ) {
 		ApplicationManager.getApplication().invokeLater( () -> {
-			Notification notification = NotificationGroupManager.getInstance()
-			    .getNotificationGroup( NOTIFICATION_GROUP_ID )
-			    .createNotification( title, message, NotificationType.INFORMATION );
-
-			notification.addAction( new NotificationAction( "Download" ) {
-
-				@Override
-				public void actionPerformed( @NotNull AnActionEvent e, @NotNull Notification notification ) {
-					notification.expire();
-					result.complete( true );
-				}
+			if ( project != null && project.isDisposed() )
+				return;
+			CompletableFuture<Boolean>	result			= new CompletableFuture<>();
+			Notification				notification	= createDownloadConfirmation( title, message, result );
+			result.thenAccept( accepted -> {
+				if ( accepted )
+					download.run();
 			} );
-
-			notification.addAction( new NotificationAction( "Not Now" ) {
-
-				@Override
-				public void actionPerformed( @NotNull AnActionEvent e, @NotNull Notification notification ) {
-					notification.expire();
-					result.complete( false );
-				}
-			} );
-
-			// If notification is closed without action, treat as declined
-			notification.whenExpired( () -> {
-				if ( !result.isDone() ) {
-					result.complete( false );
-				}
-			} );
-
 			notification.notify( project );
 		} );
-
-		try {
-			return result.get( TIMEOUT_SECONDS, TimeUnit.SECONDS );
-		} catch ( Exception e ) {
-			return false;
-		}
 	}
+
+	static Notification createDownloadConfirmation( String title, String message, CompletableFuture<Boolean> result ) {
+		Notification notification = NotificationGroupManager.getInstance()
+		    .getNotificationGroup( NOTIFICATION_GROUP_ID )
+		    .createNotification( title, message, NotificationType.INFORMATION );
+
+		notification.addAction( new NotificationAction( "Download" ) {
+
+			@Override
+			public void actionPerformed( @NotNull AnActionEvent e, @NotNull Notification notification ) {
+				// Expiration invokes the dismissal callback synchronously. Record the
+				// user's choice first so Download is not interpreted as a decline.
+				result.complete( true );
+				notification.expire();
+			}
+		} );
+
+		notification.addAction( new NotificationAction( "Not Now" ) {
+
+			@Override
+			public void actionPerformed( @NotNull AnActionEvent e, @NotNull Notification notification ) {
+				result.complete( false );
+				notification.expire();
+			}
+		} );
+
+		// If notification is closed without action, treat as declined
+		notification.whenExpired( () -> {
+			if ( !result.isDone() ) {
+				result.complete( false );
+			}
+		} );
+		result.whenComplete( ( accepted, failure ) -> notification.expire() );
+		return notification;
+	}
+
 }

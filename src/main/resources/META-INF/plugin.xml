@@ -72,6 +72,7 @@
     <annotator
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.lsp.BoxLangLspAnnotator" />
+    <gotoDeclarationHandler implementation="com.ortussolutions.intellijboxlang.lsp.BoxLangGotoDeclarationHandler" />
 
     <lang.psiStructureViewFactory
       language="BoxLang"
@@ -80,6 +81,11 @@
     <lang.commenter
       language="BoxLang"
       implementationClass="com.ortussolutions.intellijboxlang.BoxLangCommenter" />
+
+    <typedHandler implementation="com.ortussolutions.intellijboxlang.cfml.CfmlClosingTagHandler" />
+    <completion.contributor language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.cfml.CfmlCompletionContributor" />
+    <lang.documentationProvider language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.cfml.CfmlDocumentationProvider" />
+    <codeInsight.parameterInfo language="BoxLang" implementationClass="com.ortussolutions.intellijboxlang.cfml.CfmlParameterInfoHandler" />
 
     <!-- Global (application-level) BoxLang settings -->
     <applicationConfigurable
@@ -134,6 +140,10 @@
   </extensions>
 
   <actions>
+    <action id="BoxLang.ToolingStatus" class="com.ortussolutions.intellijboxlang.actions.BoxLangToolingStatusAction"
+      text="BoxLang Tooling Status" description="Inspect runtime and language-server status and preview a diagnostic report">
+      <add-to-group group-id="ToolsMenu" anchor="last" />
+    </action>
     <action
       id="BoxLang.NewFile"
       class="com.ortussolutions.intellijboxlang.actions.BoxLangCreateFileAction"

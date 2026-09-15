@@ -98,20 +98,30 @@ public final class BoxLangTextAttributes {
 	    "BOXLANG_STORAGE_MODIFIER",
 	    DefaultLanguageHighlighterColors.KEYWORD
 	);
-	// Falls back to IDENTIFIER — XML overrides give distinct color
+	// Falls back to STATIC_METHOD so built-ins read like Java static API calls.
 	public static final TextAttributesKey	BUILTIN_FUNCTION	= TextAttributesKey.createTextAttributesKey(
 	    "BOXLANG_BUILTIN_FUNCTION",
-	    DefaultLanguageHighlighterColors.IDENTIFIER
+	    DefaultLanguageHighlighterColors.STATIC_METHOD
+	);
+	// Falls back to STATIC_METHOD for built-in member methods (for example, arr.toList()).
+	public static final TextAttributesKey	MEMBER_FUNCTION		= TextAttributesKey.createTextAttributesKey(
+	    "BOXLANG_MEMBER_FUNCTION",
+	    DefaultLanguageHighlighterColors.STATIC_METHOD
 	);
 	// Falls back to IDENTIFIER — XML overrides give distinct color
 	public static final TextAttributesKey	STRUCT_KEY			= TextAttributesKey.createTextAttributesKey(
 	    "BOXLANG_STRUCT_KEY",
 	    DefaultLanguageHighlighterColors.IDENTIFIER
 	);
-	// Falls back to IDENTIFIER — XML overrides give distinct color
+	// Falls back to FUNCTION_CALL for Java-like call-site coloring.
 	public static final TextAttributesKey	FUNCTION_CALL		= TextAttributesKey.createTextAttributesKey(
 	    "BOXLANG_FUNCTION_CALL",
-	    DefaultLanguageHighlighterColors.IDENTIFIER
+	    DefaultLanguageHighlighterColors.FUNCTION_CALL
+	);
+	// Falls back to INSTANCE_METHOD for object method calls (for example, qb.from()).
+	public static final TextAttributesKey	METHOD_CALL			= TextAttributesKey.createTextAttributesKey(
+	    "BOXLANG_METHOD_CALL",
+	    DefaultLanguageHighlighterColors.INSTANCE_METHOD
 	);
 	// Falls back to IDENTIFIER — XML overrides give distinct color
 	public static final TextAttributesKey	NAMED_ARGUMENT		= TextAttributesKey.createTextAttributesKey(

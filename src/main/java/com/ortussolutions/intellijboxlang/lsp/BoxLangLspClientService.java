@@ -1,5 +1,6 @@
 package com.ortussolutions.intellijboxlang.lsp;
 
+import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer;
 import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.openapi.components.Service;
 import com.intellij.openapi.application.ApplicationManager;
@@ -10,11 +11,16 @@ import com.intellij.openapi.fileEditor.FileDocumentManagerListener;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.vfs.VirtualFile;
+import com.intellij.openapi.vfs.VirtualFileManager;
+import com.intellij.openapi.vfs.newvfs.BulkFileListener;
+import com.intellij.openapi.vfs.newvfs.events.VFileEvent;
 import com.intellij.util.execution.ParametersListUtil;
 import com.intellij.util.messages.MessageBusConnection;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileUtil;
 import com.ortussolutions.intellijboxlang.runtime.BoxLangLspBootstrapService;
 import com.ortussolutions.intellijboxlang.runtime.LspBootstrapResult;
+import com.ortussolutions.intellijboxlang.runtime.BoxLangSetupTasks;
+import com.ortussolutions.intellijboxlang.runtime.BoxLangToolingStatus;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
 import com.ortussolutions.intellijboxlang.settings.BoxLangSettingsResolver;
 import java.io.IOException;
@@ -31,10 +37,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import org.eclipse.lsp4j.ClientCapabilities;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.InitializedParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensCapabilities;
 import org.eclipse.lsp4j.SemanticTokensClientCapabilitiesRequests;
@@ -53,34 +64,76 @@ import org.eclipse.lsp4j.services.LanguageServer;
 import org.jetbrains.annotations.Nullable;
 
 @Service( Service.Level.PROJECT )
-public final class BoxLangLspClientService {
+public final class BoxLangLspClientService implements com.intellij.openapi.Disposable {
 
-	private static final Logger										LOG								= Logger.getInstance( BoxLangLspClientService.class );
-	private static final int										CONNECT_TIMEOUT_MS				= 10000;
-	private static final int										REQUEST_TIMEOUT_MS				= 5000;
-	private static final int										INITIALIZE_TIMEOUT_MS			= 20000;
+	private static final Logger										LOG									= Logger.getInstance( BoxLangLspClientService.class );
+	private static final int										CONNECT_TIMEOUT_MS					= 10000;
+	private static final int										REQUEST_TIMEOUT_MS					= 5000;
+	private static final int										INITIALIZE_TIMEOUT_MS				= 20000;
+	private static final List<String>								SUPPORTED_SEMANTIC_TOKEN_TYPES		= List.of(
+	    "namespace",
+	    "type",
+	    "class",
+	    "enum",
+	    "interface",
+	    "struct",
+	    "typeParameter",
+	    "parameter",
+	    "variable",
+	    "property",
+	    "enumMember",
+	    "event",
+	    "function",
+	    "method",
+	    "macro",
+	    "keyword",
+	    "modifier",
+	    "comment",
+	    "string",
+	    "number",
+	    "regexp",
+	    "operator",
+	    "decorator",
+	    "tag"
+	);
+	private static final List<String>								SUPPORTED_SEMANTIC_TOKEN_MODIFIERS	= List.of(
+	    "declaration",
+	    "definition",
+	    "readonly",
+	    "static",
+	    "deprecated",
+	    "abstract",
+	    "async",
+	    "modification",
+	    "documentation",
+	    "defaultLibrary"
+	);
 
 	private final Project											project;
-	private final Map<String, Integer>								documentVersions				= new ConcurrentHashMap<>();
-	private final Map<String, Long>									documentStamps					= new ConcurrentHashMap<>();
-	private final Map<String, CachedTokens>							tokenCache						= new ConcurrentHashMap<>();
-	private final Map<String, CachedSymbols>						symbolCache						= new ConcurrentHashMap<>();
-	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics						= new ConcurrentHashMap<>();
-	private final java.util.concurrent.atomic.AtomicBoolean			starting						= new java.util.concurrent.atomic.AtomicBoolean( false );
-	private final Object											startLock						= new Object();
-	private boolean													diagnosticPullSupported			= false;
-	private boolean													semanticTokensSupported			= false;
-	private boolean													workspaceSymbolsSupported		= false;
-	private boolean													workspaceSymbolsDisabledLogged	= false;
+	private final BoxLangLspAppContextResolver						appContextResolver					= new BoxLangLspAppContextResolver();
+	private final Map<String, Integer>								documentVersions					= new ConcurrentHashMap<>();
+	private final Map<String, Long>									documentStamps						= new ConcurrentHashMap<>();
+	private final Map<String, CachedTokens>							tokenCache							= new ConcurrentHashMap<>();
+	private final Map<String, CachedSymbols>						symbolCache							= new ConcurrentHashMap<>();
+	private final Map<String, List<org.eclipse.lsp4j.Diagnostic>>	diagnostics							= new ConcurrentHashMap<>();
+	private final java.util.concurrent.atomic.AtomicBoolean			starting							= new java.util.concurrent.atomic.AtomicBoolean(
+	    false );
+	private final Object											startLock							= new Object();
+	private boolean													diagnosticPullSupported				= false;
+	private boolean													semanticTokensSupported				= false;
+	private boolean													workspaceSymbolsSupported			= false;
+	private boolean													workspaceSymbolsDisabledLogged		= false;
 
-	private Process													process;
+	private volatile Process										process;
 	private Socket													socket;
-	private LanguageServer											server;
+	private volatile LanguageServer									server;
 	private SemanticTokensLegend									legend;
+	private volatile BoxLangLspAppContext							activeAppContext;
+	private volatile boolean										appContextDirty						= true;
 
 	public BoxLangLspClientService( Project project ) {
 		this.project = project;
-		MessageBusConnection connection = project.getMessageBus().connect();
+		MessageBusConnection connection = project.getMessageBus().connect( this );
 		connection.subscribe( FileDocumentManagerListener.TOPIC, new FileDocumentManagerListener() {
 
 			@Override
@@ -88,6 +141,21 @@ public final class BoxLangLspClientService {
 				VirtualFile file = FileDocumentManager.getInstance().getFile( document );
 				if ( file != null && isBoxLangFile( file ) ) {
 					notifyDidSave( file, document );
+				}
+				if ( appContextResolver.isContextRelevantFile( file ) ) {
+					markAppContextDirty();
+				}
+			}
+		} );
+		connection.subscribe( VirtualFileManager.VFS_CHANGES, new BulkFileListener() {
+
+			@Override
+			public void after( List<? extends VFileEvent> events ) {
+				for ( VFileEvent event : events ) {
+					if ( appContextResolver.isContextRelevantPath( event.getPath() ) ) {
+						markAppContextDirty();
+						return;
+					}
 				}
 			}
 		} );
@@ -102,18 +170,28 @@ public final class BoxLangLspClientService {
 	}
 
 	public SemanticTokens requestSemanticTokens( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
+			LOG.info( "Skipping semantic tokens request: LSP server not started yet" );
 			return null;
 		}
 		if ( !semanticTokensSupported || legend == null ) {
+			LOG.info(
+			    "Skipping semantic tokens request: supported=" + semanticTokensSupported
+			        + ", legendPresent=" + ( legend != null )
+			);
 			return null;
 		}
 		String uri = safeToUri( file );
 		if ( uri == null ) {
+			LOG.info( "Skipping semantic tokens request: unable to resolve document URI from VirtualFile" );
 			return null;
 		}
 		CachedTokens cached = tokenCache.get( uri );
 		if ( cached != null && cached.stamp == document.getModificationStamp() ) {
+			LOG.info(
+			    "Using cached semantic tokens: uri='" + uri + "', tuples=" + tokenTupleCount( cached.tokens )
+			        + ", stamp=" + cached.stamp
+			);
 			return cached.tokens;
 		}
 		syncDocument( uri, document );
@@ -123,6 +201,15 @@ public final class BoxLangLspClientService {
 			SemanticTokens						tokens	= future.get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
 			if ( tokens != null ) {
 				tokenCache.put( uri, new CachedTokens( document.getModificationStamp(), tokens ) );
+				int	legendTypes	= legend.getTokenTypes() != null ? legend.getTokenTypes().size() : 0;
+				int	legendMods	= legend.getTokenModifiers() != null ? legend.getTokenModifiers().size() : 0;
+				LOG.info(
+				    "LSP semanticTokens/full success: uri='" + uri + "', tuples=" + tokenTupleCount( tokens )
+				        + ", ints=" + tokens.getData().size() + ", legendTypes=" + legendTypes + ", legendModifiers="
+				        + legendMods
+				);
+			} else {
+				LOG.info( "LSP semanticTokens/full returned null: uri='" + uri + "'" );
 			}
 			return tokens;
 		} catch ( Exception e ) {
@@ -133,7 +220,7 @@ public final class BoxLangLspClientService {
 
 	@SuppressWarnings( "deprecation" )
 	public List<org.eclipse.lsp4j.WorkspaceSymbol> requestWorkspaceSymbols( String query ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( null ) ) {
 			return List.of();
 		}
 		if ( !workspaceSymbolsSupported ) {
@@ -178,7 +265,7 @@ public final class BoxLangLspClientService {
 	}
 
 	public List<org.eclipse.lsp4j.DocumentSymbol> requestDocumentSymbols( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return List.of();
 		}
 		String uri = safeToUri( file );
@@ -203,7 +290,53 @@ public final class BoxLangLspClientService {
 		}
 	}
 
+	public List<Location> requestDefinition( VirtualFile file, Document document, int offset ) {
+		if ( !ensureServerForFile( file ) ) {
+			LOG.debug( "Skipping definition request: LSP server unavailable for " + ( file != null ? file.getPath() : "<null>" ) );
+			return List.of();
+		}
+		BoxLangLspAppContext context = activeAppContext;
+		if ( context != null ) {
+			LOG.debug(
+			    "Definition request app context: root=" + context.appRoot()
+			        + ", mappings=" + context.mappings().size()
+			        + ", moduleDirs=" + context.moduleDirectories().size()
+			        + ", hash=" + context.contextHash()
+			);
+		}
+		String uri = safeToUri( file );
+		if ( uri == null ) {
+			return List.of();
+		}
+		syncDocument( uri, document );
+		DefinitionParams params = new DefinitionParams();
+		params.setTextDocument( new TextDocumentIdentifier( uri ) );
+		params.setPosition( offsetToPosition( document, offset ) );
+		try {
+			var				result		= server.getTextDocumentService().definition( params )
+			    .get( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
+			List<Location>	locations	= flattenDefinitionResult( result );
+			LOG.debug(
+			    "LSP definition result: uri='" + uri + "', offset=" + offset + ", count=" + locations.size()
+			);
+			return locations;
+		} catch ( Exception e ) {
+			logLspRequestFailure( "textDocument/definition", "uri='" + uri + "', offset=" + offset, e );
+			return List.of();
+		}
+	}
+
+	private boolean ensureServerForFile( @Nullable VirtualFile file ) {
+		refreshAppContextIfNeeded( file );
+		return ensureStarted();
+	}
+
+	private volatile boolean	startupFailed;
+	private volatile boolean	disposed;
+
 	private boolean ensureStarted() {
+		if ( disposed || project.isDisposed() || startupFailed )
+			return false;
 		if ( server != null ) {
 			return true;
 		}
@@ -220,13 +353,15 @@ public final class BoxLangLspClientService {
 				startServer();
 				return server != null;
 			} catch ( Exception e ) {
-				LOG.warn( "Unable to start BoxLang LSP", e );
+				handleStartupFailure( e );
 				return false;
 			}
 		}
 	}
 
 	public void ensureStartedAsync() {
+		if ( disposed || project.isDisposed() || startupFailed )
+			return;
 		if ( server != null ) {
 			return;
 		}
@@ -245,9 +380,10 @@ public final class BoxLangLspClientService {
 					startServer();
 					if ( server != null ) {
 						LOG.info( "BoxLang LSP started" );
+						requestEditorRehighlight();
 					}
 				} catch ( Exception e ) {
-					LOG.warn( "Unable to start BoxLang LSP", e );
+					handleStartupFailure( e );
 				} finally {
 					starting.set( false );
 				}
@@ -255,19 +391,69 @@ public final class BoxLangLspClientService {
 		} );
 	}
 
+	/** Explicit recovery is allowed after an automatic startup failure. */
+	public void retryStartup() {
+		ApplicationManager.getApplication().executeOnPooledThread( () -> {
+			synchronized ( startLock ) {
+				if ( disposed || project.isDisposed() )
+					return;
+				stopServer();
+				startupFailed = false;
+			}
+			ensureStartedAsync();
+		} );
+	}
+
+	private void handleStartupFailure( Exception error ) {
+		stopServer();
+		startupFailed = true;
+		if ( !disposed && !project.isDisposed() ) {
+			BoxLangSetupTasks.reportFailure( project, "BoxLang language server", error, this::retryStartup );
+		}
+	}
+
+	@Override
+	public void dispose() {
+		disposed = true;
+		synchronized ( startLock ) {
+			stopServer();
+		}
+	}
+
+	private void captureOutput( Process launched, java.io.InputStream stream, String channel ) {
+		ApplicationManager.getApplication().executeOnPooledThread( () -> {
+			try ( var reader = new java.io.InputStreamReader( stream, StandardCharsets.UTF_8 ) ) {
+				char[]	buffer	= new char[ 1024 ];
+				int		count;
+				while ( ( count = reader.read( buffer ) ) != -1 ) {
+					if ( process == launched )
+						BoxLangToolingStatus.get( project ).event( "LSP " + channel + ": " + new String( buffer, 0, count ) );
+				}
+			} catch ( IOException ignored ) {
+				// Closing or replacing the server closes its streams.
+			}
+		} );
+	}
+
 	private void startServer() throws Exception {
+		if ( disposed || project.isDisposed() || startupFailed )
+			return;
 		BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
 		LspBootstrapResult		bootstrap	= BoxLangLspBootstrapService.tryPrepareForLspClient( project );
 		if ( bootstrap == null ) {
 			// LSP is not available yet (prompt was shown if applicable); skip startup quietly.
 			return;
 		}
-		int					port		= allocatePort();
+		int						port		= allocatePort();
+		BoxLangLspAppContext	appContext	= resolveAppContext( null, settings );
 
-		GeneralCommandLine	commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
+		GeneralCommandLine		commandLine	= new GeneralCommandLine( resolveJavaExecutable( settings ) );
 		commandLine.withCharset( StandardCharsets.UTF_8 );
 		commandLine.withEnvironment( "BOXLANG_HOME", bootstrap.lspBoxLangHome.toString() );
-		commandLine.withEnvironment( "BOXLANG_MODULESDIRECTORY", bootstrap.lspModulePath.toString() );
+		commandLine.withEnvironment(
+		    "BOXLANG_MODULESDIRECTORY",
+		    toModulesDirectoryEnv( mergeModuleDirectories( bootstrap.lspModulePath, appContext.moduleDirectories() ) )
+		);
 		commandLine.withEnvironment( "CLASSPATH", bootstrap.boxLangJarPath.toString() );
 		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
 			commandLine.withEnvironment( "JAVA_HOME", settings.javaHome );
@@ -278,31 +464,54 @@ public final class BoxLangLspClientService {
 		commandLine.addParameter( "module:bx-lsp" );
 		commandLine.addParameters( "--debug-server-port", String.valueOf( port ) );
 
-		process	= commandLine.createProcess();
-		socket	= connectWithRetries( port );
+		BoxLangToolingStatus.get( project ).record( "BoxLang language server", BoxLangToolingStatus.Phase.STARTING,
+		    "Starting Java process and initializing the language server." );
+		process = commandLine.createProcess();
+		Process launched = process;
+		captureOutput( launched, launched.getInputStream(), "stdout" );
+		captureOutput( launched, launched.getErrorStream(), "stderr" );
+		launched.onExit().thenRunAsync( () -> {
+			synchronized ( startLock ) {
+				if ( process == launched && !disposed && !project.isDisposed() ) {
+					handleStartupFailure( new IOException( "Language server exited with code " + launched.exitValue()
+					    + ". Check Java 21+ and the runtime/module paths in BoxLang settings. Open BoxLang Tooling Status for startup output." ) );
+				}
+			}
+		} );
+		socket = connectWithRetries( port );
 
-		BoxLangLspClient	client		= new BoxLangLspClient( this );
-		var					launcher	= LSPLauncher.createClientLauncher( client, socket.getInputStream(), socket.getOutputStream() );
-		server = launcher.getRemoteProxy();
+		BoxLangLspClient	client				= new BoxLangLspClient( this );
+		var					launcher			= LSPLauncher.createClientLauncher( client, socket.getInputStream(), socket.getOutputStream() );
+		LanguageServer		initializingServer	= launcher.getRemoteProxy();
 		launcher.startListening();
 
-		InitializeResult result = server.initialize( createInitializeParams() )
+		InitializeResult result = initializingServer.initialize( createInitializeParams( appContext ) )
 		    .get( INITIALIZE_TIMEOUT_MS, TimeUnit.MILLISECONDS );
-		legend						= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
+		legend					= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null
 		    ? result.getCapabilities().getSemanticTokensProvider().getLegend()
 		    : null;
-		semanticTokensSupported		= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null;
+		semanticTokensSupported	= result.getCapabilities() != null && result.getCapabilities().getSemanticTokensProvider() != null;
+		int	legendTypes	= legend != null && legend.getTokenTypes() != null ? legend.getTokenTypes().size() : 0;
+		int	legendMods	= legend != null && legend.getTokenModifiers() != null ? legend.getTokenModifiers().size() : 0;
+		LOG.info(
+		    "LSP semantic tokens capability: supported=" + semanticTokensSupported + ", legendTypes=" + legendTypes + ", legendModifiers="
+		        + legendMods
+		);
 		workspaceSymbolsSupported	= result.getCapabilities() != null && result.getCapabilities().getWorkspaceSymbolProvider() != null;
 		diagnosticPullSupported		= result.getCapabilities() != null
 		    && result.getCapabilities().getDiagnosticProvider() != null;
-		server.initialized( new InitializedParams() );
+		initializingServer.initialized( new InitializedParams() );
+		server = initializingServer;
+		BoxLangToolingStatus.get( project ).record( "BoxLang language server", BoxLangToolingStatus.Phase.READY,
+		    "Initialized. Semantic tokens: " + semanticTokensSupported + "; diagnostic pull: " + diagnosticPullSupported + "." );
 	}
 
-	private InitializeParams createInitializeParams() {
+	private InitializeParams createInitializeParams( BoxLangLspAppContext appContext ) {
 		InitializeParams params = new InitializeParams();
-		params.setWorkspaceFolders( getWorkspaceFolders() );
+		params.setWorkspaceFolders( getWorkspaceFolders( appContext ) );
 		params.setCapabilities( createClientCapabilities() );
 		params.setProcessId( ( int ) ProcessHandle.current().pid() );
+		params.setInitializationOptions( appContext.toInitializeOptions() );
 		return params;
 	}
 
@@ -314,14 +523,217 @@ public final class BoxLangLspClientService {
 		requests.setFull( Either.forLeft( true ) );
 		requests.setRange( Either.forLeft( false ) );
 		semanticTokens.setRequests( requests );
-		semanticTokens.setTokenTypes( List.of() );
-		semanticTokens.setTokenModifiers( List.of() );
+		semanticTokens.setTokenTypes( SUPPORTED_SEMANTIC_TOKEN_TYPES );
+		semanticTokens.setTokenModifiers( SUPPORTED_SEMANTIC_TOKEN_MODIFIERS );
 		semanticTokens.setFormats( List.of( "relative" ) );
 		semanticTokens.setOverlappingTokenSupport( true );
 		semanticTokens.setMultilineTokenSupport( true );
 		textDocument.setSemanticTokens( semanticTokens );
 		capabilities.setTextDocument( textDocument );
 		return capabilities;
+	}
+
+	private void refreshAppContextIfNeeded( @Nullable VirtualFile file ) {
+		BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve( project );
+		resolveAppContext( file, settings );
+	}
+
+	private BoxLangLspAppContext resolveAppContext( @Nullable VirtualFile file, BoxLangResolvedSettings settings ) {
+		synchronized ( startLock ) {
+			boolean					needsRefresh	= activeAppContext == null || appContextDirty || shouldRefreshForFile( file, activeAppContext );
+			BoxLangLspAppContext	current			= activeAppContext;
+			if ( !needsRefresh && current != null ) {
+				return current;
+			}
+			BoxLangLspAppContext	resolved	= appContextResolver.resolve( project, file, settings.lspModules );
+			boolean					changed		= hasContextChanged( current, resolved );
+			activeAppContext	= resolved;
+			appContextDirty		= false;
+			if ( changed && server != null ) {
+				LOG.info( "Restarting BoxLang LSP due to app context hash change: " + resolved.contextHash() );
+				stopServer();
+				requestEditorRehighlight();
+			}
+			return resolved;
+		}
+	}
+
+	private boolean shouldRefreshForFile( @Nullable VirtualFile file, BoxLangLspAppContext context ) {
+		if ( file == null ) {
+			return false;
+		}
+		try {
+			Path	filePath	= file.toNioPath().toAbsolutePath().normalize();
+			Path	currentRoot	= context.appRoot() != null ? context.appRoot().toAbsolutePath().normalize() : null;
+			Path	projectRoot	= project.getBasePath() != null ? Path.of( project.getBasePath() ).toAbsolutePath().normalize() : null;
+			Path	nearestRoot	= BoxLangLspAppContextResolver.findNearestApplicationRoot( filePath, projectRoot );
+			if ( currentRoot == null ) {
+				return true;
+			}
+			return nearestRoot == null
+			    ? !filePath.startsWith( currentRoot )
+			    : !nearestRoot.toAbsolutePath().normalize().equals( currentRoot );
+		} catch ( RuntimeException ignored ) {
+			return false;
+		}
+	}
+
+	private void markAppContextDirty() {
+		appContextDirty = true;
+	}
+
+	private void stopServer() {
+		if ( process != null || server != null )
+			BoxLangToolingStatus.get( project ).record( "BoxLang language server", BoxLangToolingStatus.Phase.NOT_STARTED, "Server stopped." );
+		LanguageServer	previousServer	= server;
+		Process			previousProcess	= process;
+		Socket			previousSocket	= socket;
+
+		server							= null;
+		process							= null;
+		socket							= null;
+		legend							= null;
+		diagnosticPullSupported			= false;
+		semanticTokensSupported			= false;
+		workspaceSymbolsSupported		= false;
+		workspaceSymbolsDisabledLogged	= false;
+		documentVersions.clear();
+		documentStamps.clear();
+		tokenCache.clear();
+		symbolCache.clear();
+		diagnostics.clear();
+
+		if ( previousServer != null ) {
+			try {
+				previousServer.shutdown();
+			} catch ( Exception e ) {
+				LOG.debug( "Failed to shutdown previous BoxLang LSP server cleanly", e );
+			}
+			try {
+				previousServer.exit();
+			} catch ( Exception e ) {
+				LOG.debug( "Failed to send exit to previous BoxLang LSP server", e );
+			}
+		}
+		if ( previousSocket != null ) {
+			try {
+				previousSocket.close();
+			} catch ( IOException e ) {
+				LOG.debug( "Failed to close previous BoxLang LSP socket", e );
+			}
+		}
+		if ( previousProcess != null ) {
+			previousProcess.destroy();
+		}
+	}
+
+	static List<Path> mergeModuleDirectories( Path lspModulesPath, List<Path> appModuleDirectories ) {
+		List<Path>						merged	= new ArrayList<>();
+		java.util.LinkedHashSet<Path>	dedupe	= new java.util.LinkedHashSet<>();
+		if ( lspModulesPath != null ) {
+			dedupe.add( lspModulesPath.toAbsolutePath().normalize() );
+		}
+		if ( appModuleDirectories != null ) {
+			for ( Path dir : appModuleDirectories ) {
+				if ( dir != null ) {
+					dedupe.add( dir.toAbsolutePath().normalize() );
+				}
+			}
+		}
+		merged.addAll( dedupe );
+		return merged;
+	}
+
+	static String toModulesDirectoryEnv( List<Path> moduleDirectories ) {
+		if ( moduleDirectories == null || moduleDirectories.isEmpty() ) {
+			return "";
+		}
+		return moduleDirectories.stream()
+		    .map( path -> path.toAbsolutePath().normalize().toString() )
+		    .distinct()
+		    .collect( Collectors.joining( "," ) );
+	}
+
+	static boolean hasContextChanged( @Nullable BoxLangLspAppContext current, @Nullable BoxLangLspAppContext next ) {
+		if ( current == null && next == null ) {
+			return false;
+		}
+		if ( current == null || next == null ) {
+			return true;
+		}
+		return !current.contextHash().equals( next.contextHash() );
+	}
+
+	static Position offsetToPosition( Document document, int offset ) {
+		if ( document == null ) {
+			return new Position( 0, 0 );
+		}
+		int	clampedOffset	= Math.max( 0, Math.min( offset, document.getTextLength() ) );
+		int	line			= document.getLineNumber( clampedOffset );
+		int	lineStart		= document.getLineStartOffset( line );
+		return new Position( line, Math.max( 0, clampedOffset - lineStart ) );
+	}
+
+	static int positionToOffset( Document document, @Nullable Position position ) {
+		if ( document == null || position == null || document.getLineCount() == 0 ) {
+			return 0;
+		}
+		int	line		= Math.max( 0, Math.min( position.getLine(), document.getLineCount() - 1 ) );
+		int	lineStart	= document.getLineStartOffset( line );
+		int	lineEnd		= document.getLineEndOffset( line );
+		int	column		= Math.max( 0, position.getCharacter() );
+		return Math.min( lineStart + column, lineEnd );
+	}
+
+	static List<Location> flattenDefinitionResult(
+	    @Nullable Either<List<? extends Location>, List<? extends LocationLink>> result ) {
+		if ( result == null ) {
+			return List.of();
+		}
+		if ( result.isLeft() ) {
+			return result.getLeft() == null ? List.of() : List.copyOf( result.getLeft() );
+		}
+		List<? extends LocationLink> links = result.getRight();
+		if ( links == null || links.isEmpty() ) {
+			return List.of();
+		}
+		List<Location> locations = new ArrayList<>( links.size() );
+		for ( LocationLink link : links ) {
+			if ( link == null || link.getTargetUri() == null || link.getTargetUri().isBlank() ) {
+				continue;
+			}
+			Location location = new Location();
+			location.setUri( link.getTargetUri() );
+			location.setRange( link.getTargetSelectionRange() != null ? link.getTargetSelectionRange() : link.getTargetRange() );
+			locations.add( location );
+		}
+		return locations;
+	}
+
+	@Nullable
+	BoxLangLspAppContext getAppContextForFile( @Nullable VirtualFile file ) {
+		BoxLangResolvedSettings settings = BoxLangSettingsResolver.resolve( project );
+		return resolveAppContext( file, settings );
+	}
+
+	@Nullable
+	BoxLangLspAppContext getActiveAppContext() {
+		return activeAppContext;
+	}
+
+	boolean shouldSuppressMappedReferenceDiagnostic( @Nullable VirtualFile file, org.eclipse.lsp4j.Diagnostic diagnostic ) {
+		if ( !BoxLangLspAppContextResolver.isExtendsOrImplementsDiagnostic( diagnostic ) ) {
+			return false;
+		}
+		String classReference = BoxLangLspAppContextResolver.extractClassReference( diagnostic );
+		if ( classReference == null || classReference.isBlank() ) {
+			return false;
+		}
+		BoxLangLspAppContext context = getAppContextForFile( file );
+		if ( context == null ) {
+			return false;
+		}
+		return appContextResolver.canResolveMappedClassReference( context, classReference );
 	}
 
 	private void syncDocument( String uri, Document document ) {
@@ -348,6 +760,15 @@ public final class BoxLangLspClientService {
 		}
 	}
 
+	private void requestEditorRehighlight() {
+		ApplicationManager.getApplication().invokeLater( () -> {
+			if ( project.isDisposed() ) {
+				return;
+			}
+			DaemonCodeAnalyzer.getInstance( project ).restart();
+		} );
+	}
+
 	private int allocatePort() throws IOException {
 		try ( ServerSocket socket = new ServerSocket( 0 ) ) {
 			return socket.getLocalPort();
@@ -358,11 +779,17 @@ public final class BoxLangLspClientService {
 		IOException	lastError	= null;
 		long		deadline	= System.currentTimeMillis() + CONNECT_TIMEOUT_MS;
 		while ( System.currentTimeMillis() < deadline ) {
+			if ( disposed || project.isDisposed() )
+				throw new IOException( "Language-server startup cancelled because the project closed." );
+			if ( process != null && !process.isAlive() )
+				throw new IOException(
+				    "Language-server process exited with code " + process.exitValue() + ". Check BoxLang Tooling Status for startup output." );
+			Socket attempt = new Socket();
 			try {
-				Socket socket = new Socket();
-				socket.connect( new InetSocketAddress( "127.0.0.1", port ), CONNECT_TIMEOUT_MS );
-				return socket;
+				attempt.connect( new InetSocketAddress( "127.0.0.1", port ), CONNECT_TIMEOUT_MS );
+				return attempt;
 			} catch ( IOException e ) {
+				attempt.close();
 				lastError = e;
 				try {
 					Thread.sleep( 200 );
@@ -396,12 +823,15 @@ public final class BoxLangLspClientService {
 		return args;
 	}
 
-	private List<WorkspaceFolder> getWorkspaceFolders() {
+	private List<WorkspaceFolder> getWorkspaceFolders( BoxLangLspAppContext appContext ) {
 		String basePath = project.getBasePath();
-		if ( basePath == null ) {
+		if ( basePath == null || basePath.isBlank() ) {
 			return List.of();
 		}
-		String uri = Path.of( basePath ).toUri().toString();
+		Path	workspaceRoot	= appContext != null && appContext.appRoot() != null
+		    ? appContext.appRoot()
+		    : Path.of( basePath ).toAbsolutePath().normalize();
+		String	uri				= workspaceRoot.toUri().toString();
 		return List.of( new WorkspaceFolder( uri, project.getName() ) );
 	}
 
@@ -421,8 +851,37 @@ public final class BoxLangLspClientService {
 		return BoxLangFileUtil.isBoxLangFile( file );
 	}
 
+	/** Completion uses an already initialized server; editor setup owns prompting and startup. */
+	public List<org.eclipse.lsp4j.CompletionItem> requestCompletions( VirtualFile file, Document document, int offset ) {
+		if ( server == null || disposed || project.isDisposed() )
+			return List.of();
+		if ( ApplicationManager.getApplication().isDispatchThread() )
+			return List.of();
+		if ( !ensureServerForFile( file ) )
+			return List.of();
+		String uri = safeToUri( file );
+		if ( uri == null )
+			return List.of();
+		syncDocument( uri, document );
+		var params = new org.eclipse.lsp4j.CompletionParams( new TextDocumentIdentifier( uri ), offsetToPosition( document, offset ) );
+		try {
+			var	future	= server.getTextDocumentService().completion( params ).orTimeout( REQUEST_TIMEOUT_MS, TimeUnit.MILLISECONDS );
+			var	result	= com.intellij.openapi.progress.util.ProgressIndicatorUtils.awaitWithCheckCanceled( future );
+			if ( result == null )
+				return List.of();
+			if ( result.isLeft() )
+				return result.getLeft() == null ? List.of() : result.getLeft();
+			return result.getRight() == null || result.getRight().getItems() == null ? List.of() : result.getRight().getItems();
+		} catch ( com.intellij.openapi.progress.ProcessCanceledException e ) {
+			throw e;
+		} catch ( Exception e ) {
+			LOG.debug( "Unable to request BoxLang completions", e );
+			return List.of();
+		}
+	}
+
 	public List<org.eclipse.lsp4j.Diagnostic> requestDiagnostics( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return List.of();
 		}
 		String uri = safeToUri( file );
@@ -440,15 +899,14 @@ public final class BoxLangLspClientService {
 	}
 
 	void updateDiagnostics( String uri, List<org.eclipse.lsp4j.Diagnostic> list ) {
-		if ( list == null ) {
-			diagnostics.remove( uri );
-		} else {
-			diagnostics.put( uri, List.copyOf( list ) );
-		}
+		List<org.eclipse.lsp4j.Diagnostic>	next		= list == null ? List.of() : List.copyOf( list );
+		List<org.eclipse.lsp4j.Diagnostic>	previous	= next.isEmpty() ? diagnostics.remove( uri ) : diagnostics.put( uri, next );
+		if ( !java.util.Objects.equals( previous == null ? List.of() : previous, next ) )
+			requestEditorRehighlight();
 	}
 
 	private void notifyDidSave( VirtualFile file, Document document ) {
-		if ( !ensureStarted() ) {
+		if ( !ensureServerForFile( file ) ) {
 			return;
 		}
 		String uri = safeToUri( file );
@@ -611,6 +1069,13 @@ public final class BoxLangLspClientService {
 			}
 		}
 		return null;
+	}
+
+	private static int tokenTupleCount( SemanticTokens tokens ) {
+		if ( tokens == null || tokens.getData() == null ) {
+			return 0;
+		}
+		return tokens.getData().size() / 5;
 	}
 
 	private record CachedTokens( long stamp, SemanticTokens tokens ) {

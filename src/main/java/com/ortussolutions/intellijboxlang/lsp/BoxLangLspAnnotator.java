@@ -14,7 +14,9 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import com.ortussolutions.intellijboxlang.file.BoxLangFileType;
 import com.ortussolutions.intellijboxlang.highlighting.BoxLangTextAttributes;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.eclipse.lsp4j.SemanticTokens;
 import org.eclipse.lsp4j.SemanticTokensLegend;
 import org.jetbrains.annotations.NotNull;
@@ -55,6 +57,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 
 		List<Integer>	data		= tokens.getData();
 		List<String>	tokenTypes	= legend.getTokenTypes();
+		List<String>	tokenMods	= legend.getTokenModifiers();
+		CharSequence	source		= document.getCharsSequence();
 		int				line		= 0;
 		int				column		= 0;
 		for ( int i = 0; i + 4 < data.size(); i += 5 ) {
@@ -62,6 +66,7 @@ public final class BoxLangLspAnnotator implements Annotator {
 			int	deltaStart		= data.get( i + 1 );
 			int	length			= data.get( i + 2 );
 			int	tokenTypeIndex	= data.get( i + 3 );
+			int	tokenModifier	= data.get( i + 4 );
 
 			line	+= deltaLine;
 			column	= deltaLine == 0 ? column + deltaStart : deltaStart;
@@ -76,7 +81,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 			}
 
 			String				tokenType	= tokenTypeIndex < tokenTypes.size() ? tokenTypes.get( tokenTypeIndex ) : null;
-			TextAttributesKey	key			= mapTokenType( tokenType );
+			Set<String>			modifiers	= decodeTokenModifiers( tokenModifier, tokenMods );
+			TextAttributesKey	key			= resolveSemanticToken( tokenType, modifiers, source, startOffset, endOffset );
 			if ( key == null ) {
 				continue;
 			}
@@ -88,9 +94,63 @@ public final class BoxLangLspAnnotator implements Annotator {
 		}
 	}
 
-	private TextAttributesKey mapTokenType( String tokenType ) {
+	static Set<String> decodeTokenModifiers( int tokenModifierBits, List<String> legendModifiers ) {
+		if ( tokenModifierBits == 0 || legendModifiers == null || legendModifiers.isEmpty() ) {
+			return Set.of();
+		}
+		Set<String> modifiers = new HashSet<>();
+		for ( int bit = 0; bit < legendModifiers.size(); bit++ ) {
+			if ( ( tokenModifierBits & ( 1 << bit ) ) != 0 ) {
+				modifiers.add( legendModifiers.get( bit ) );
+			}
+		}
+		return modifiers.isEmpty() ? Set.of() : Set.copyOf( modifiers );
+	}
+
+	static TextAttributesKey resolveSemanticToken(
+	    String tokenType,
+	    Set<String> modifiers,
+	    CharSequence source,
+	    int startOffset,
+	    int endOffset ) {
+		if ( "modifier".equals( tokenType ) && isFollowedByStructKeyColon( source, endOffset ) ) {
+			return BoxLangTextAttributes.STRUCT_KEY;
+		}
+		return mapSemanticToken( tokenType, modifiers );
+	}
+
+	private static boolean isFollowedByStructKeyColon( CharSequence source, int endOffset ) {
+		if ( source == null || endOffset < 0 || endOffset > source.length() ) {
+			return false;
+		}
+		int index = endOffset;
+		while ( index < source.length() && Character.isWhitespace( source.charAt( index ) ) ) {
+			index++;
+		}
+		if ( index >= source.length() || source.charAt( index ) != ':' ) {
+			return false;
+		}
+		if ( index + 1 < source.length() ) {
+			char next = source.charAt( index + 1 );
+			return next != ':' && next != '=';
+		}
+		return true;
+	}
+
+	static TextAttributesKey mapSemanticToken( String tokenType, Set<String> modifiers ) {
 		if ( tokenType == null ) {
 			return null;
+		}
+		Set<String>	safeModifiers	= modifiers == null ? Set.of() : modifiers;
+		boolean		isDeclaration	= safeModifiers.contains( "declaration" ) || safeModifiers.contains( "definition" );
+		if ( isDeclaration && ( "function".equals( tokenType ) || "method".equals( tokenType ) ) ) {
+			return BoxLangTextAttributes.FUNCTION_NAME;
+		}
+		if ( "function".equals( tokenType ) && safeModifiers.contains( "defaultLibrary" ) ) {
+			return BoxLangTextAttributes.BUILTIN_FUNCTION;
+		}
+		if ( "method".equals( tokenType ) && safeModifiers.contains( "defaultLibrary" ) ) {
+			return BoxLangTextAttributes.MEMBER_FUNCTION;
 		}
 		return switch ( tokenType ) {
 			case "keyword" -> BoxLangTextAttributes.KEYWORD;
@@ -99,7 +159,8 @@ public final class BoxLangLspAnnotator implements Annotator {
 			case "number" -> BoxLangTextAttributes.NUMBER;
 			case "operator" -> BoxLangTextAttributes.OPERATOR;
 			case "class", "type", "namespace" -> BoxLangTextAttributes.STORAGE_TYPE;
-			case "function", "method" -> BoxLangTextAttributes.FUNCTION_NAME;
+			case "function" -> BoxLangTextAttributes.FUNCTION_CALL;
+			case "method" -> BoxLangTextAttributes.METHOD_CALL;
 			case "parameter" -> DefaultLanguageHighlighterColors.PARAMETER;
 			case "property" -> DefaultLanguageHighlighterColors.INSTANCE_FIELD;
 			case "variable" -> BoxLangTextAttributes.SCOPE_VARIABLE;
@@ -118,23 +179,40 @@ public final class BoxLangLspAnnotator implements Annotator {
 			if ( diagnostic.getRange() == null ) {
 				continue;
 			}
-			int	startOffset	= offsetFor( document, diagnostic.getRange().getStart().getLine(), diagnostic.getRange().getStart().getCharacter() );
-			int	endOffset	= offsetFor( document, diagnostic.getRange().getEnd().getLine(), diagnostic.getRange().getEnd().getCharacter() );
-			if ( startOffset >= endOffset ) {
+			if ( lspService.shouldSuppressMappedReferenceDiagnostic( psiFile.getVirtualFile(), diagnostic ) ) {
 				continue;
 			}
-			holder.newAnnotation( mapSeverity( diagnostic.getSeverity() ), diagnostic.getMessage() )
-			    .range( new TextRange( startOffset, endOffset ) )
-			    .create();
+			TextRange range = diagnosticRange( document, diagnostic.getRange() );
+			if ( range == null )
+				continue;
+			var annotation = holder.newAnnotation( mapSeverity( diagnostic.getSeverity() ), diagnostic.getMessage() ).range( range );
+			if ( range.isEmpty() )
+				annotation.afterEndOfLine();
+			annotation.create();
 		}
 	}
 
-	private int offsetFor( Document document, int line, int column ) {
+	static TextRange diagnosticRange( Document document, org.eclipse.lsp4j.Range range ) {
+		int	start	= offsetFor( document, range.getStart().getLine(), range.getStart().getCharacter() );
+		int	end		= offsetFor( document, range.getEnd().getLine(), range.getEnd().getCharacter() );
+		if ( end < start )
+			return null;
+		// Parser diagnostics frequently point at a missing token, including EOF. Keep these visible.
+		if ( start == end && document.getTextLength() > 0 ) {
+			if ( start == document.getTextLength() )
+				start--;
+			else
+				end++;
+		}
+		return new TextRange( start, end );
+	}
+
+	private static int offsetFor( Document document, int line, int column ) {
 		if ( line < 0 || line >= document.getLineCount() ) {
 			return document.getTextLength();
 		}
 		int start = document.getLineStartOffset( line );
-		return Math.min( start + Math.max( column, 0 ), document.getTextLength() );
+		return Math.min( start + Math.max( column, 0 ), document.getLineEndOffset( line ) );
 	}
 
 	private HighlightSeverity mapSeverity( org.eclipse.lsp4j.DiagnosticSeverity severity ) {

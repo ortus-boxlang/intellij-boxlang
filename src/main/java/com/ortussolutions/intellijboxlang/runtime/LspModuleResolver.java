@@ -109,4 +109,31 @@ public final class LspModuleResolver {
 			return null;
 		}
 	}
+
+	@Nullable
+	public static Path resolveOverrideModulePath( @Nullable Path overridePath ) {
+		if ( overridePath == null || !Files.exists( overridePath ) ) {
+			return null;
+		}
+		if ( Files.isRegularFile( overridePath ) ) {
+			String fileName = overridePath.getFileName() != null ? overridePath.getFileName().toString() : "";
+			if ( "ModuleConfig.bx".equalsIgnoreCase( fileName ) || "box.json".equalsIgnoreCase( fileName ) ) {
+				Path parent = overridePath.getParent();
+				return isModuleRoot( parent ) ? parent : null;
+			}
+			return null;
+		}
+		if ( isModuleRoot( overridePath ) ) {
+			return overridePath;
+		}
+		Path nested = overridePath.resolve( "bx-lsp" );
+		return isModuleRoot( nested ) ? nested : null;
+	}
+
+	private static boolean isModuleRoot( @Nullable Path path ) {
+		return path != null
+		    && Files.isDirectory( path )
+		    && Files.exists( path.resolve( "box.json" ) )
+		    && Files.exists( path.resolve( "ModuleConfig.bx" ) );
+	}
 }

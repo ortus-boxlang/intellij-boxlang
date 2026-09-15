@@ -1,0 +1,4 @@
+CFDocs: https://github.com/foundeo/cfdocs
+Revision: fae1224610a5955fc723690e987c426b79ff02b4
+Subset: Adobe ColdFusion or Lucee functions, metadata and parameters.
+Regenerate: python3 scripts/update-cfml-catalog.py /path/to/cfdocs

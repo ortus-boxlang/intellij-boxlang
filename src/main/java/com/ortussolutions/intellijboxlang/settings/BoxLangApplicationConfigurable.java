@@ -224,35 +224,25 @@ public final class BoxLangApplicationConfigurable implements Configurable {
 						}
 					} );
 				} catch ( IOException e ) {
-					LOG.warn( "Failed to fetch BoxLang runtime versions", e );
+					com.ortussolutions.intellijboxlang.runtime.BoxLangSetupTasks.reportFailure( null, "Fetching BoxLang runtime versions", e,
+					    () -> pickAndDownloadRuntime() );
 				}
 			}
 		} );
 	}
 
 	private void downloadRuntimeVersion( String resolvedVersion, String displayVersion ) {
-		ProgressManager.getInstance().run( new Task.Backgroundable( null, "Downloading BoxLang Runtime", true ) {
-
-			@Override
-			public void run( @NotNull ProgressIndicator indicator ) {
-				try {
-					BoxLangVersionInfo info = BoxLangVersionCatalog.resolveVersionInfo( resolvedVersion );
-					if ( info == null ) {
-						LOG.warn( "Could not resolve BoxLang version info for: " + resolvedVersion );
-						return;
-					}
-					BoxLangRuntimeInstaller.installRuntime( resolvedVersion, info.downloadUrl(), indicator );
-
-					ApplicationManager.getApplication().invokeLater( () -> {
-						BoxLangApplicationSettings.getInstance().getSettings().boxLangVersion = displayVersion;
-						if ( form != null ) {
-							form.updateModuleStatus( null, cachedRuntimeLatestVersion, cachedLspLatestVersion,
-							    cachedDebuggerLatestVersion );
-						}
-					} );
-				} catch ( IOException e ) {
-					LOG.warn( "Failed to download BoxLang runtime version " + resolvedVersion, e );
-				}
+		com.ortussolutions.intellijboxlang.runtime.BoxLangSetupTasks.download( null, "BoxLang runtime", indicator -> {
+			BoxLangVersionInfo info = BoxLangVersionCatalog.resolveVersionInfo( resolvedVersion );
+			if ( info == null )
+				throw new IOException( "Could not resolve BoxLang version " + resolvedVersion );
+			BoxLangRuntimeInstaller.installRuntime( resolvedVersion, info.downloadUrl(), indicator );
+		}, () -> {
+			BoxLangApplicationSettings.getInstance().getSettings().boxLangVersion = displayVersion;
+			if ( form != null )
+				form.updateModuleStatus( null, cachedRuntimeLatestVersion, cachedLspLatestVersion, cachedDebuggerLatestVersion );
+			for ( var project : com.intellij.openapi.project.ProjectManager.getInstance().getOpenProjects() ) {
+				com.ortussolutions.intellijboxlang.lsp.BoxLangLspClientService.getInstance( project ).retryStartup();
 			}
 		} );
 	}
@@ -323,31 +313,23 @@ public final class BoxLangApplicationConfigurable implements Configurable {
 						}
 					} );
 				} catch ( IOException e ) {
-					LOG.warn( "Failed to fetch LSP versions", e );
+					com.ortussolutions.intellijboxlang.runtime.BoxLangSetupTasks.reportFailure( null, "Fetching LSP versions", e,
+					    BoxLangApplicationConfigurable.this::pickAndDownloadLsp );
 				}
 			}
 		} );
 	}
 
 	private void downloadLspVersion( String version ) {
-		ProgressManager.getInstance().run( new Task.Backgroundable( null, "Downloading BoxLang LSP", true ) {
-
-			@Override
-			public void run( @NotNull ProgressIndicator indicator ) {
-				try {
-					Path targetDir = resolveGlobalBoxLangHome().resolve( "modules" ).resolve( "bx-lsp" );
-					ForgeBoxLspInstaller.install( version, targetDir, indicator );
-
-					ApplicationManager.getApplication().invokeLater( () -> {
-						BoxLangApplicationSettings.getInstance().getSettings().lspVersion = version;
-						if ( form != null ) {
-							form.updateModuleStatus( null, cachedRuntimeLatestVersion, cachedLspLatestVersion,
-							    cachedDebuggerLatestVersion );
-						}
-					} );
-				} catch ( IOException e ) {
-					LOG.warn( "Failed to download LSP version " + version, e );
-				}
+		com.ortussolutions.intellijboxlang.runtime.BoxLangSetupTasks.download( null, "BoxLang LSP module", indicator -> {
+			Path targetDir = resolveGlobalBoxLangHome().resolve( "modules" ).resolve( "bx-lsp" );
+			ForgeBoxLspInstaller.install( version, targetDir, indicator );
+		}, () -> {
+			BoxLangApplicationSettings.getInstance().getSettings().lspVersion = version;
+			if ( form != null )
+				form.updateModuleStatus( null, cachedRuntimeLatestVersion, cachedLspLatestVersion, cachedDebuggerLatestVersion );
+			for ( var project : com.intellij.openapi.project.ProjectManager.getInstance().getOpenProjects() ) {
+				com.ortussolutions.intellijboxlang.lsp.BoxLangLspClientService.getInstance( project ).retryStartup();
 			}
 		} );
 	}

@@ -23,6 +23,7 @@ public final class BoxLangDownloadService {
 		connection.setRequestMethod( "GET" );
 		connection.setConnectTimeout( 30000 );
 		connection.setReadTimeout( 60000 );
+		Path partial = Files.createTempFile( target.getParent(), target.getFileName().toString(), ".part" );
 
 		try {
 			int responseCode = connection.getResponseCode();
@@ -42,14 +43,13 @@ public final class BoxLangDownloadService {
 			}
 
 			try ( InputStream input = connection.getInputStream();
-			    OutputStream output = Files.newOutputStream( target ) ) {
+			    OutputStream output = Files.newOutputStream( partial ) ) {
 				byte[]	buffer	= new byte[ BUFFER_SIZE ];
 				long	total	= 0;
 				int		read;
 				while ( ( read = input.read( buffer ) ) >= 0 ) {
-					if ( indicator != null && indicator.isCanceled() ) {
-						throw new IOException( "Download cancelled" );
-					}
+					if ( indicator != null )
+						indicator.checkCanceled();
 					output.write( buffer, 0, read );
 					total += read;
 					if ( indicator != null ) {
@@ -63,9 +63,20 @@ public final class BoxLangDownloadService {
 						}
 					}
 				}
+				if ( contentLength >= 0 && total != contentLength ) {
+					throw new IOException( "Download was incomplete. Expected " + contentLength + " bytes but received " + total + "." );
+				}
+			}
+			if ( indicator != null )
+				indicator.checkCanceled();
+			try {
+				Files.move( partial, target, java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING );
+			} catch ( java.nio.file.AtomicMoveNotSupportedException e ) {
+				Files.move( partial, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING );
 			}
 		} finally {
 			connection.disconnect();
+			Files.deleteIfExists( partial );
 		}
 	}
 

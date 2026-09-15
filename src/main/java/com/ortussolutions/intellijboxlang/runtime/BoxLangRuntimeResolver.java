@@ -52,6 +52,24 @@ public final class BoxLangRuntimeResolver {
 			return info;
 		}
 
+		// A compatible installed runtime must remain usable when the catalog is offline.
+		BoxLangRuntimeSelection cached = findCachedRuntime( com.ortussolutions.intellijboxlang.settings.BoxLangStoragePaths.getRuntimeCacheRoot(),
+		    requestedVersion, treatAsMinimum );
+		if ( cached != null ) {
+			info.jarPath			= cached.jarPath.toString();
+			info.resolvedVersion	= cached.resolvedVersion;
+			info.needsDownload		= false;
+			return info;
+		}
+		for ( var installed : BoxLangSystemRuntimeLocator.findAll() ) {
+			if ( versionSatisfies( installed.version, requestedVersion, treatAsMinimum ) && BoxLangRuntimeInstaller.isValidRuntimeJar( installed.jarPath ) ) {
+				info.jarPath			= installed.jarPath.toString();
+				info.resolvedVersion	= installed.version;
+				info.needsDownload		= false;
+				return info;
+			}
+		}
+
 		try {
 			BoxLangVersionInfo versionInfo = treatAsMinimum
 			    ? BoxLangVersionCatalog.resolveLatestAtLeastInfo( requestedVersion )
@@ -70,17 +88,6 @@ public final class BoxLangRuntimeResolver {
 				return info;
 			}
 
-			// Not in IDE cache — search all system runtimes for one that satisfies the version constraint.
-			// We check all (not just the BVM "current") so that a newer installed version is found even
-			// if the user hasn't run "bvm use <version>" yet.
-			for ( BoxLangSystemRuntimeLocator.SystemRuntimeInfo systemRuntime : BoxLangSystemRuntimeLocator.findAll() ) {
-				if ( versionSatisfies( systemRuntime.version, requestedVersion, treatAsMinimum ) ) {
-					info.jarPath			= systemRuntime.jarPath.toString();
-					info.resolvedVersion	= systemRuntime.version;
-					info.needsDownload		= false;
-					return info;
-				}
-			}
 		} catch ( IOException ignored ) {
 			info.needsDownload = true;
 			return info;
@@ -88,6 +95,26 @@ public final class BoxLangRuntimeResolver {
 
 		info.needsDownload = true;
 		return info;
+	}
+
+	static BoxLangRuntimeSelection findCachedRuntime( Path cacheRoot, String requestedVersion, boolean treatAsMinimum ) {
+		if ( !java.nio.file.Files.isDirectory( cacheRoot ) )
+			return null;
+		try ( var directories = java.nio.file.Files.list( cacheRoot ) ) {
+			var candidate = directories.filter( java.nio.file.Files::isDirectory )
+			    .filter( dir -> versionSatisfies( dir.getFileName().toString(), requestedVersion, treatAsMinimum ) )
+			    .filter( dir -> BoxLangRuntimeInstaller.isValidRuntimeJar( dir.resolve( dir.getFileName() + ".jar" ) ) )
+			    .max( ( a, b ) -> compareVersions( a.getFileName().toString().replaceFirst( "^boxlang-", "" ),
+			        b.getFileName().toString().replaceFirst( "^boxlang-", "" ) ) );
+			if ( candidate.isEmpty() )
+				return null;
+			var result = new BoxLangRuntimeSelection();
+			result.resolvedVersion	= candidate.get().getFileName().toString();
+			result.jarPath			= candidate.get().resolve( result.resolvedVersion + ".jar" );
+			return result;
+		} catch ( IOException ignored ) {
+			return null;
+		}
 	}
 
 	/**
@@ -99,7 +126,7 @@ public final class BoxLangRuntimeResolver {
 	 * Version comparison is done numerically per segment (e.g. 1.11.0 &gt; 1.6.0) rather than
 	 * lexicographically, which would incorrectly treat "1.11" as less than "1.6".
 	 */
-	private static boolean versionSatisfies( String installedVersion, String requestedVersion, boolean treatAsMinimum ) {
+	static boolean versionSatisfies( String installedVersion, String requestedVersion, boolean treatAsMinimum ) {
 		if ( installedVersion == null || requestedVersion == null ) {
 			return false;
 		}
@@ -107,10 +134,13 @@ public final class BoxLangRuntimeResolver {
 		String	installed	= installedVersion.startsWith( "boxlang-" ) ? installedVersion.substring( 8 ) : installedVersion;
 		String	requested	= requestedVersion.startsWith( "boxlang-" ) ? requestedVersion.substring( 8 ) : requestedVersion;
 
-		if ( !treatAsMinimum ) {
-			return installed.equals( requested );
+		try {
+			var	actual		= new com.vdurmont.semver4j.Semver( installed, com.vdurmont.semver4j.Semver.SemverType.NPM );
+			var	required	= BoxLangVersionCatalog.parseMinimumVersion( requested );
+			return required != null && ( treatAsMinimum ? actual.isGreaterThanOrEqualTo( required ) : actual.isEquivalentTo( required ) );
+		} catch ( RuntimeException invalidVersion ) {
+			return false;
 		}
-		return compareVersions( installed, requested ) >= 0;
 	}
 
 	/**
