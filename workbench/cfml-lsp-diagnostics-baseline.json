@@ -1,0 +1,148 @@
+{
+  "runtime": "boxlang-1.12.0-snapshot.jar",
+  "runtime_sha256": "f30b7e5c5012c4affdefc0ae1c5f6ca717877aa0cf4e1b81fabd517decb5a8ab",
+  "module": "1.9.0-snapshot",
+  "capabilities": {
+    "textDocumentSync": 2,
+    "hoverProvider": true,
+    "completionProvider": {
+      "triggerCharacters": [
+        "."
+      ]
+    },
+    "signatureHelpProvider": {
+      "triggerCharacters": [
+        "(",
+        ","
+      ]
+    },
+    "definitionProvider": true,
+    "typeDefinitionProvider": true,
+    "implementationProvider": true,
+    "referencesProvider": true,
+    "documentSymbolProvider": true,
+    "workspaceSymbolProvider": true,
+    "codeActionProvider": {
+      "codeActionKinds": [
+        "quickfix",
+        "source.fixAll",
+        "refactor.rewrite"
+      ]
+    },
+    "codeLensProvider": {
+      "resolveProvider": true
+    },
+    "semanticTokensProvider": {
+      "legend": {
+        "tokenTypes": [
+          "function",
+          "method",
+          "property"
+        ],
+        "tokenModifiers": [
+          "declaration",
+          "defaultLibrary"
+        ]
+      },
+      "full": true
+    },
+    "diagnosticProvider": {
+      "interFileDependencies": false,
+      "workspaceDiagnostics": true
+    }
+  },
+  "cases": [
+    {
+      "file": "valid-template.cfm",
+      "source": "<cfoutput>#ucase(\"ok\")#</cfoutput>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-script.cfm",
+      "source": "<cfscript>value = len(\"ok\");</cfscript>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-component.cfc",
+      "source": "component { public string function greet(required string name) { return \"Hi \" & arguments.name; } }",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-tag-component.cfc",
+      "source": "<cfcomponent><cffunction name=\"greet\" returntype=\"string\"><cfargument name=\"name\" type=\"string\" required=\"true\"><cfreturn arguments.name></cffunction></cfcomponent>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-comments.cfm",
+      "source": "<!--- <cfif> ([) ---><cfset value = \"([)\">",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "unclosed-tag.cfm",
+      "source": "<cfif true><cfset value = 1>",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    },
+    {
+      "file": "mismatched-tags.cfm",
+      "source": "<cfoutput>hello</cfif>",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    },
+    {
+      "file": "missing-paren.cfm",
+      "source": "<cfscript>value = len(\"ok\";</cfscript>",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    },
+    {
+      "file": "missing-brace.cfc",
+      "source": "component { function greet() { return \"ok\"; }",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    },
+    {
+      "file": "missing-expression.cfm",
+      "source": "<cfset value = >",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    },
+    {
+      "file": "bad-expression.cfm",
+      "source": "<cfscript>value = 1 + ;</cfscript>",
+      "expect_error": true,
+      "errors_observed": false,
+      "matches_expectation": false,
+      "diagnostics": []
+    }
+  ],
+  "module_jar_sha256": {
+    "bx-lsp-1.6.0-all.jar": "9f790e08c81aaae1946b0295342ff906e95410ba42f8a955b6d12c90f2f91f82",
+    "bx-lsp-1.9.0-snapshot-all.jar": "cc7d781e00eedfaa10f66542ea52004b56d837e18b7f932d5e766cd15ca72f87"
+  }
+}

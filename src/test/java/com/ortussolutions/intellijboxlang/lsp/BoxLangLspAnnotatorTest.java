@@ -7,6 +7,26 @@ import junit.framework.TestCase;
 
 public class BoxLangLspAnnotatorTest extends TestCase {
 
+	public void testZeroWidthEofDiagnosticRemainsVisible() {
+		var	document	= new com.intellij.openapi.editor.impl.DocumentImpl( "<cfset value = >" );
+		var	position	= new org.eclipse.lsp4j.Position( 0, document.getTextLength() );
+		assertEquals( new com.intellij.openapi.util.TextRange( document.getTextLength() - 1, document.getTextLength() ),
+		    BoxLangLspAnnotator.diagnosticRange( document, new org.eclipse.lsp4j.Range( position, position ) ) );
+	}
+
+	public void testZeroWidthInteriorDiagnosticHighlightsNextCharacter() {
+		var	document	= new com.intellij.openapi.editor.impl.DocumentImpl( "abc" );
+		var	position	= new org.eclipse.lsp4j.Position( 0, 1 );
+		assertEquals( new com.intellij.openapi.util.TextRange( 1, 2 ),
+		    BoxLangLspAnnotator.diagnosticRange( document, new org.eclipse.lsp4j.Range( position, position ) ) );
+	}
+
+	public void testDiagnosticColumnsDoNotSpillIntoNextLine() {
+		var document = new com.intellij.openapi.editor.impl.DocumentImpl( "abc\ndef" );
+		assertEquals( new com.intellij.openapi.util.TextRange( 1, 3 ), BoxLangLspAnnotator.diagnosticRange( document,
+		    new org.eclipse.lsp4j.Range( new org.eclipse.lsp4j.Position( 0, 1 ), new org.eclipse.lsp4j.Position( 0, 100 ) ) ) );
+	}
+
 	public void testMapSemanticToken_mapsDefaultLibraryFunctionAsBuiltIn() {
 		assertSame(
 		    BoxLangTextAttributes.BUILTIN_FUNCTION,

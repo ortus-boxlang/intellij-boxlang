@@ -1,0 +1,308 @@
+{
+  "runtime": "boxlang-1.12.0-snapshot.jar",
+  "runtime_sha256": "f30b7e5c5012c4affdefc0ae1c5f6ca717877aa0cf4e1b81fabd517decb5a8ab",
+  "module": "1.9.0-snapshot",
+  "module_jar_sha256": {
+    "bx-lsp-1.9.0-snapshot-all.jar": "21a0b05609fb95493d789872d7d21bcf5d62be1f23763f17c513dbdf6a3df65b"
+  },
+  "capabilities": {
+    "textDocumentSync": 2,
+    "hoverProvider": true,
+    "completionProvider": {
+      "triggerCharacters": [
+        "."
+      ]
+    },
+    "signatureHelpProvider": {
+      "triggerCharacters": [
+        "(",
+        ","
+      ]
+    },
+    "definitionProvider": true,
+    "typeDefinitionProvider": true,
+    "implementationProvider": true,
+    "referencesProvider": true,
+    "documentSymbolProvider": true,
+    "workspaceSymbolProvider": true,
+    "codeActionProvider": {
+      "codeActionKinds": [
+        "quickfix",
+        "source.fixAll",
+        "refactor.rewrite"
+      ]
+    },
+    "codeLensProvider": {
+      "resolveProvider": true
+    },
+    "semanticTokensProvider": {
+      "legend": {
+        "tokenTypes": [
+          "function",
+          "method",
+          "property"
+        ],
+        "tokenModifiers": [
+          "declaration",
+          "defaultLibrary"
+        ]
+      },
+      "full": true
+    },
+    "diagnosticProvider": {
+      "interFileDependencies": false,
+      "workspaceDiagnostics": true
+    }
+  },
+  "cases": [
+    {
+      "file": "valid-template.cfm",
+      "source": "<cfoutput>#ucase(\"ok\")#</cfoutput>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-script.cfm",
+      "source": "<cfscript>value = len(\"ok\");</cfscript>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-component.cfc",
+      "source": "component { public string function greet(required string name) { return \"Hi \" & arguments.name; } }",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-tag-component.cfc",
+      "source": "<cfcomponent><cffunction name=\"greet\" returntype=\"string\"><cfargument name=\"name\" type=\"string\" required=\"true\"><cfreturn arguments.name></cffunction></cfcomponent>",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "valid-comments.cfm",
+      "source": "<!--- <cfif> ([) ---><cfset value = \"([)\">",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "empty.cfm",
+      "source": "",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "whitespace.cfm",
+      "source": "  \n\t",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "comment-only.cfm",
+      "source": "<!--- <cfif true> --->",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "nested-comment.cfm",
+      "source": "<!--- outer <!--- <cfif true> ---> end --->",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "trailing-comment.cfm",
+      "source": "<cfset value = 1><!--- done --->",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "text-and-tags.cfm",
+      "source": "hello\n<cfset value = 1>world",
+      "expect_error": false,
+      "errors_observed": false,
+      "matches_expectation": true,
+      "diagnostics": []
+    },
+    {
+      "file": "unclosed-after-text.cfm",
+      "source": "hello\n<cfif true><cfset value = 1>",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": 1,
+              "character": 28
+            },
+            "end": {
+              "line": 1,
+              "character": 28
+            }
+          },
+          "severity": 1,
+          "message": "'<EOF>' was unexpected \nexpecting one of: component_open\n<cfif true><cfset value = 1>\n                            "
+        }
+      ]
+    },
+    {
+      "file": "unclosed-tag.cfm",
+      "source": "<cfif true><cfset value = 1>",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 28
+            },
+            "end": {
+              "line": 0,
+              "character": 28
+            }
+          },
+          "severity": 1,
+          "message": "'<EOF>' was unexpected \nexpecting one of: component_open\n<cfif true><cfset value = 1>\n                            "
+        }
+      ]
+    },
+    {
+      "file": "mismatched-tags.cfm",
+      "source": "<cfoutput>hello</cfif>",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 0
+            },
+            "end": {
+              "line": 0,
+              "character": 0
+            }
+          },
+          "severity": 1,
+          "message": "Unclosed output tag on line 1\n<cfoutput>hello</cfif>\n^^^^^^^^^"
+        }
+      ]
+    },
+    {
+      "file": "missing-paren.cfm",
+      "source": "<cfscript>value = len(\"ok\";</cfscript>",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": -1,
+              "character": 0
+            },
+            "end": {
+              "line": -1,
+              "character": 0
+            }
+          },
+          "severity": 1,
+          "message": "Internal error(42): Un-popped Lexer modes. [DEFAULT_MODE, DEFAULT_TEMPLATE_MODE, TEMPLATE_XFSCRIPT, DEFAULT_SCRIPT_MODE] Please report this to the developers.\n<cfscript>value = len(\"ok\";</cfscript>\n^"
+        }
+      ]
+    },
+    {
+      "file": "missing-brace.cfc",
+      "source": "component { function greet() { return \"ok\"; }",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 10
+            },
+            "end": {
+              "line": 0,
+              "character": 10
+            }
+          },
+          "severity": 1,
+          "message": "Unclosed curly brace [{] on line 1\ncomponent { function greet() { return \"ok\"; }\n          ^"
+        }
+      ]
+    },
+    {
+      "file": "missing-expression.cfm",
+      "source": "<cfset value = >",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": 0,
+              "character": 15
+            },
+            "end": {
+              "line": 0,
+              "character": 15
+            }
+          },
+          "severity": 1,
+          "message": "'>' was unexpected while parsing an expression\nexpecting one of: '.' accessor, 'final', 'null', 'static', Annotation, Expression, Finally clause, Number, Operator, Statement, String literal, dot_float_literal...\n<cfset value = >\n               ^"
+        }
+      ]
+    },
+    {
+      "file": "bad-expression.cfm",
+      "source": "<cfscript>value = 1 + ;</cfscript>",
+      "expect_error": true,
+      "errors_observed": true,
+      "matches_expectation": true,
+      "diagnostics": [
+        {
+          "range": {
+            "start": {
+              "line": -1,
+              "character": 0
+            },
+            "end": {
+              "line": -1,
+              "character": 0
+            }
+          },
+          "severity": 1,
+          "message": "Internal error(42): Un-popped Lexer modes. [DEFAULT_MODE, DEFAULT_TEMPLATE_MODE, TEMPLATE_XFSCRIPT, DEFAULT_SCRIPT_MODE] Please report this to the developers.\n<cfscript>value = 1 + ;</cfscript>\n^"
+        }
+      ]
+    }
+  ]
+}

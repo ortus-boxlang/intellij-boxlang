@@ -179,23 +179,40 @@ public final class BoxLangLspAnnotator implements Annotator {
 			if ( diagnostic.getRange() == null ) {
 				continue;
 			}
-			int	startOffset	= offsetFor( document, diagnostic.getRange().getStart().getLine(), diagnostic.getRange().getStart().getCharacter() );
-			int	endOffset	= offsetFor( document, diagnostic.getRange().getEnd().getLine(), diagnostic.getRange().getEnd().getCharacter() );
-			if ( startOffset >= endOffset ) {
+			if ( lspService.shouldSuppressMappedReferenceDiagnostic( psiFile.getVirtualFile(), diagnostic ) ) {
 				continue;
 			}
-			holder.newAnnotation( mapSeverity( diagnostic.getSeverity() ), diagnostic.getMessage() )
-			    .range( new TextRange( startOffset, endOffset ) )
-			    .create();
+			TextRange range = diagnosticRange( document, diagnostic.getRange() );
+			if ( range == null )
+				continue;
+			var annotation = holder.newAnnotation( mapSeverity( diagnostic.getSeverity() ), diagnostic.getMessage() ).range( range );
+			if ( range.isEmpty() )
+				annotation.afterEndOfLine();
+			annotation.create();
 		}
 	}
 
-	private int offsetFor( Document document, int line, int column ) {
+	static TextRange diagnosticRange( Document document, org.eclipse.lsp4j.Range range ) {
+		int	start	= offsetFor( document, range.getStart().getLine(), range.getStart().getCharacter() );
+		int	end		= offsetFor( document, range.getEnd().getLine(), range.getEnd().getCharacter() );
+		if ( end < start )
+			return null;
+		// Parser diagnostics frequently point at a missing token, including EOF. Keep these visible.
+		if ( start == end && document.getTextLength() > 0 ) {
+			if ( start == document.getTextLength() )
+				start--;
+			else
+				end++;
+		}
+		return new TextRange( start, end );
+	}
+
+	private static int offsetFor( Document document, int line, int column ) {
 		if ( line < 0 || line >= document.getLineCount() ) {
 			return document.getTextLength();
 		}
 		int start = document.getLineStartOffset( line );
-		return Math.min( start + Math.max( column, 0 ), document.getTextLength() );
+		return Math.min( start + Math.max( column, 0 ), document.getLineEndOffset( line ) );
 	}
 
 	private HighlightSeverity mapSeverity( org.eclipse.lsp4j.DiagnosticSeverity severity ) {

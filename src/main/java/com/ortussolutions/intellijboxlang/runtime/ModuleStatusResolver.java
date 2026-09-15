@@ -44,7 +44,7 @@ public final class ModuleStatusResolver {
 				    .filter( Files::isDirectory )
 				    .filter( dir -> {
 					    String name = dir.getFileName().toString();
-					    return Files.exists( dir.resolve( name + ".jar" ) );
+					    return BoxLangRuntimeInstaller.isValidRuntimeJar( dir.resolve( name + ".jar" ) );
 				    } )
 				    .max( Comparator.comparingLong( dir -> {
 					    try {
