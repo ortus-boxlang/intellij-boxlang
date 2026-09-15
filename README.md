@@ -9,11 +9,40 @@ The official IntelliJ IDEA plugin for [BoxLang](https://boxlang.io), a modern dy
 - Customizable color schemes via **Settings > Editor > Color Scheme > BoxLang**
 - Support for keywords, strings, numbers, comments, operators, and string interpolation
 
+### CFML editing
+
+See the [CFML migration guide](docs/cfml-migration.md) for file associations, colors, compatibility, and setup troubleshooting.
+
+These features work locally in `.cfm` and `.cfc` files without the BoxLang runtime or LSP:
+
+- Type `>` to close common CFML block tags, including `cfif`, `cfoutput`, `cfloop`, `cfscript`, `cffunction`, and `cfquery`. The caret stays between the tags. Existing matching closing tags are preserved, including nested tags of the same name.
+- Self-closing tags, standalone tags such as `cfset`, custom tags, and optional-body/action tags such as `cftransaction` are not automatically closed.
+- Built-in function completion includes 800 Adobe ColdFusion/Lucee functions, signatures, return types, parameter hints, and Quick Documentation. Completion inserts parentheses and reuses existing ones. Named-argument suggestions insert `=` and omit already supplied names; parameter hints follow the argument name when arguments are reordered.
+- Suggestions appear in CFScript, CFML expression tags, and hash interpolation, with comments, literal strings, and plain template text excluded.
+- With the updated language server running, completion includes visible project functions and indexed CFC methods. Local functions override built-in signatures and documentation. Known native receiver types (for example, an `array` parameter) receive CFDocs-backed member suggestions and parameter hints. Unknown/dynamic receiver types may have no member suggestions.
+- Function availability is a combined catalog, not filtered by your server's engine/version. See [companion-module setup and verification](docs/cfml-verification.md).
+
+Function metadata is bundled from [CFDocs](https://github.com/foundeo/cfdocs) under its MIT license; built-in completion works offline. Project and member completion requests use the local language server. The source revision and license are in `src/main/resources/cfml`. To refresh the catalog from a CFDocs checkout, run `python3 scripts/update-cfml-catalog.py /path/to/cfdocs`.
+
 ### Language Server Protocol (LSP)
 - Semantic token highlighting
 - Real-time diagnostics and error reporting
 - Document symbols for structure view
 - Automatic LSP module download and management
+
+### Runtime setup and troubleshooting
+
+Download notifications start a cancellable background task with byte progress when the server provides a download size. Runtime downloads are checked before replacing the cached JAR. Failed or cancelled downloads offer **Retry**; ordinary editing does not repeatedly prompt. A compatible cached runtime can start the language server while the version catalog is offline.
+
+Use **Tools > BoxLang Tooling Status** (also available through Find Action) to inspect installation and server readiness separately:
+
+- **Waiting**: use the download notification or open BoxLang Settings.
+- **Downloading**: inspect the IDE background task for progress or cancellation.
+- **Installed**: files are present; the language server may still be starting.
+- **Ready**: the language server completed initialization.
+- **Failed**: review the failure and startup output, correct the connection, Java, or module settings, then choose **Retry Language Server**.
+
+The dialog includes a local diagnostic report with plugin/IDE/Java versions, configured paths, setup state, and bounded recent startup output. Review and edit it before choosing **Copy Report**. Common credentials and home/project paths are redacted; nothing is automatically uploaded. Custom JVM arguments, environment variables, and source files are excluded. The report shows the IDE log folder if additional logs are needed.
 
 ### Run Configurations
 - Run BoxLang scripts directly from the IDE

@@ -1,25 +1,23 @@
 package com.ortussolutions.intellijboxlang.runtime;
 
-import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.ProgressManager;
-import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
-import com.intellij.openapi.util.NlsContexts;
 import com.ortussolutions.intellijboxlang.settings.BoxLangResolvedSettings;
 import com.ortussolutions.intellijboxlang.settings.BoxLangSettingsResolver;
 import com.ortussolutions.intellijboxlang.settings.BoxLangStoragePaths;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public final class BoxLangLspBootstrapService {
 
-	private static final java.util.concurrent.ConcurrentHashMap<Project, Object>	PROJECT_LOCKS		= new java.util.concurrent.ConcurrentHashMap<>();
-	private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean>	LSP_PROMPTED		= new java.util.concurrent.ConcurrentHashMap<>();
-	private static final java.util.concurrent.ConcurrentHashMap<Project, Boolean>	RUNTIME_PROMPTED	= new java.util.concurrent.ConcurrentHashMap<>();
-	private static final com.intellij.openapi.diagnostic.Logger						LOG					= com.intellij.openapi.diagnostic.Logger
+	private static final com.intellij.openapi.util.Key<Object>										PROJECT_LOCK		= com.intellij.openapi.util.Key
+	    .create( "boxlang.bootstrap.lock" );
+	private static final com.intellij.openapi.util.Key<Boolean>										LSP_PROMPTED		= com.intellij.openapi.util.Key
+	    .create( "boxlang.lsp.prompted" );
+	private static final com.intellij.openapi.util.Key<java.util.concurrent.atomic.AtomicBoolean>	RUNTIME_PROMPTED	= com.intellij.openapi.util.Key
+	    .create( "boxlang.runtime.download.prompted" );
+	private static final com.intellij.openapi.diagnostic.Logger										LOG					= com.intellij.openapi.diagnostic.Logger
 	    .getInstance( BoxLangLspBootstrapService.class );
 
 	private BoxLangLspBootstrapService() {
@@ -28,11 +26,13 @@ public final class BoxLangLspBootstrapService {
 	public static LspBootstrapResult prepare( Project project ) throws IOException {
 		LOG.info( "Preparing BoxLang LSP bootstrap" );
 		synchronized ( getProjectLock( project ) ) {
-			BoxLangResolvedSettings	settings		= BoxLangSettingsResolver.resolve( project );
-			LspModuleInfo			lspModule		= resolveLspModule( project, settings );
-			LspRequirements			requirements	= LspRequirementsReader.read( lspModule.boxJsonPath );
+			BoxLangResolvedSettings	settings	= BoxLangSettingsResolver.resolve( project );
+			LspModuleInfo			lspModule	= resolveLspModule( project, settings );
+			BoxLangToolingStatus.get( project ).record( "BoxLang LSP module", BoxLangToolingStatus.Phase.INSTALLED,
+			    ModuleVersionReader.readVersion( lspModule.boxJsonPath ) + " at " + lspModule.modulePath );
+			LspRequirements	requirements	= LspRequirementsReader.read( lspModule.boxJsonPath );
 
-			String					requiredVersion	= settings.lspBoxLangVersion != null ? settings.lspBoxLangVersion
+			String			requiredVersion	= settings.lspBoxLangVersion != null ? settings.lspBoxLangVersion
 			    : ( requirements != null ? requirements.minimumBoxLangVersion : null );
 			if ( requiredVersion == null || requiredVersion.isBlank() ) {
 				throw new IOException( "Unable to determine required BoxLang version for LSP." );
@@ -63,6 +63,7 @@ public final class BoxLangLspBootstrapService {
 			return prepare( project );
 		} catch ( LspUnavailableException unavailable ) {
 			LOG.info( "Skipping LSP client startup: " + unavailable.getMessage() );
+			BoxLangToolingStatus.get( project ).record( "BoxLang language server", BoxLangToolingStatus.Phase.WAITING, unavailable.getMessage() );
 			return null;
 		}
 	}
@@ -91,13 +92,10 @@ public final class BoxLangLspBootstrapService {
 						return info;
 					}
 				}
-				if ( Files.exists( overridePath ) ) {
-					LOG.warn( "Configured LSP module override does not look like a bx-lsp module: " + overridePath );
-				} else {
-					LOG.warn( "Configured LSP module override path does not exist: " + overridePath );
-				}
+				throw new IOException(
+				    "Configured LSP module path does not contain a bx-lsp module: " + overridePath + ". Correct the module override in BoxLang settings." );
 			} else {
-				LOG.warn( "Configured LSP module override path is invalid: " + settings.lspModulePath );
+				throw new IOException( "Configured LSP module path is invalid. Correct the module override in BoxLang settings." );
 			}
 		}
 
@@ -140,8 +138,12 @@ public final class BoxLangLspBootstrapService {
 		// (if the user has a version set but it's not installed, that's a misconfiguration - don't auto-prompt)
 		boolean hasExplicitConfig = ( lspVersion != null && !lspVersion.isBlank() )
 		    || ( settings.lspModulePath != null && !settings.lspModulePath.isBlank() );
-		if ( !hasExplicitConfig && !hasPrompted( LSP_PROMPTED, project ) ) {
-			LSP_PROMPTED.put( project, true );
+		if ( hasExplicitConfig )
+			throw new IOException( "The configured LSP module is not installed. Check the LSP version and module override in BoxLang settings." );
+		if ( !Boolean.TRUE.equals( project.getUserData( LSP_PROMPTED ) ) ) {
+			project.putUserData( LSP_PROMPTED, true );
+			BoxLangToolingStatus.get( project ).record( "BoxLang LSP module", BoxLangToolingStatus.Phase.WAITING,
+			    "Choose Download in the LSP notification or use BoxLang settings." );
 			BoxLangPromptService.promptAndDownload(
 			    project,
 			    "Download BoxLang LSP",
@@ -160,11 +162,14 @@ public final class BoxLangLspBootstrapService {
 	}
 
 	private static Object getProjectLock( Project project ) {
-		return PROJECT_LOCKS.computeIfAbsent( project, key -> new Object() );
-	}
-
-	private static boolean hasPrompted( java.util.concurrent.ConcurrentHashMap<Project, Boolean> map, Project project ) {
-		return Boolean.TRUE.equals( map.get( project ) );
+		synchronized ( project ) {
+			Object lock = project.getUserData( PROJECT_LOCK );
+			if ( lock == null ) {
+				lock = new Object();
+				project.putUserData( PROJECT_LOCK, lock );
+			}
+			return lock;
+		}
 	}
 
 	private static BoxLangRuntimeSelection ensureRuntime( Project project, BoxLangRuntimeInfo runtimeInfo, BoxLangResolvedSettings settings )
@@ -173,46 +178,43 @@ public final class BoxLangLspBootstrapService {
 			BoxLangRuntimeSelection selection = new BoxLangRuntimeSelection();
 			selection.jarPath			= Path.of( runtimeInfo.jarPath );
 			selection.resolvedVersion	= runtimeInfo.resolvedVersion;
+			BoxLangToolingStatus.get( project ).record( "BoxLang runtime", BoxLangToolingStatus.Phase.INSTALLED,
+			    runtimeInfo.resolvedVersion + " at " + runtimeInfo.jarPath );
 			return selection;
 		}
 
-		if ( !hasPrompted( RUNTIME_PROMPTED, project ) ) {
-			if ( !BoxLangPromptService.confirmDownload( project,
-			    "Download BoxLang Runtime",
-			    "BoxLang runtime ^" + runtimeInfo.requestedVersion + " is required for the LSP. Download now?" ) ) {
-				throw new IOException( "BoxLang runtime download was declined." );
-			}
-			RUNTIME_PROMPTED.put( project, true );
+		if ( claimRuntimePrompt( project ) ) {
+			BoxLangToolingStatus.get( project ).record( "BoxLang runtime", BoxLangToolingStatus.Phase.WAITING,
+			    "A runtime is required for the LSP. Choose Download or use BoxLang settings." );
+			BoxLangPromptService.promptDownload( project, "Download BoxLang Runtime",
+			    "BoxLang runtime " + runtimeInfo.requestedVersion
+			        + " is required for the LSP. Download now? You can also download it later from BoxLang settings.",
+			    () -> BoxLangSetupTasks.download( project, "BoxLang runtime",
+			        indicator -> {
+				        // Re-resolve on each explicit attempt so a failed catalog lookup or stale URL is recoverable.
+				        BoxLangVersionInfo available = settings.lspBoxLangVersion == null || settings.lspBoxLangVersion.isBlank()
+				            ? BoxLangVersionCatalog.resolveLatestAtLeastInfo( runtimeInfo.requestedVersion )
+				            : BoxLangVersionCatalog.resolveVersionInfo( runtimeInfo.requestedVersion );
+				        if ( available == null )
+					        throw new IOException(
+					            "No runtime download matches " + runtimeInfo.requestedVersion + ". Check the LSP runtime version in BoxLang settings." );
+				        BoxLangRuntimeInstaller.installRuntime( available.name(), available.downloadUrl(), indicator );
+			        },
+			        () -> com.ortussolutions.intellijboxlang.lsp.BoxLangLspClientService.getInstance( project ).retryStartup() ) );
 		}
-
-		ProgressManager.getInstance().run( new DownloadTask( project, "Downloading BoxLang runtime" ) {
-
-			@Override
-			protected void runTask( @NotNull ProgressIndicator indicator ) throws IOException {
-				BoxLangRuntimeInstaller.installRuntime( runtimeInfo.resolvedVersion, runtimeInfo.downloadUrl, indicator );
-			}
-		} );
-
-		BoxLangRuntimeSelection selection = BoxLangRuntimeInstaller.resolveCachedJar( runtimeInfo.resolvedVersion );
-		if ( selection == null ) {
-			throw new IOException( "BoxLang runtime installation failed." );
-		}
-		return selection;
+		throw new LspUnavailableException( "BoxLang runtime is not installed. Use the download notification or BoxLang settings." );
 	}
 
-	private abstract static class DownloadTask extends Task.WithResult<Void, IOException> {
-
-		protected DownloadTask( Project project, @NlsContexts.ProgressTitle String title ) {
-			super( project, title, true );
+	static boolean claimRuntimePrompt( Project project ) {
+		java.util.concurrent.atomic.AtomicBoolean prompted;
+		synchronized ( project ) {
+			prompted = project.getUserData( RUNTIME_PROMPTED );
+			if ( prompted == null ) {
+				prompted = new java.util.concurrent.atomic.AtomicBoolean();
+				project.putUserData( RUNTIME_PROMPTED, prompted );
+			}
 		}
-
-		@Override
-		protected Void compute( @NotNull ProgressIndicator indicator ) throws IOException {
-			runTask( indicator );
-			return null;
-		}
-
-		protected abstract void runTask( @NotNull ProgressIndicator indicator ) throws IOException;
+		return prompted.compareAndSet( false, true );
 	}
 
 	public static final class LspUnavailableException extends IOException {

@@ -38,7 +38,7 @@ public final class BoxLangVersionCatalog {
 	}
 
 	public static BoxLangVersionInfo resolveLatestAtLeastInfo( String minimumVersion ) throws IOException {
-		Semver minimum = parseSemver( minimumVersion );
+		Semver minimum = parseMinimumVersion( minimumVersion );
 		if ( minimum == null ) {
 			throw new IOException( "Invalid minimum BoxLang version: " + minimumVersion );
 		}
@@ -82,7 +82,13 @@ public final class BoxLangVersionCatalog {
 
 	private static List<BoxLangVersionInfo> loadEntries() throws IOException {
 		try {
-			String						payload	= new String( URI.create( LIST_URL ).toURL().openStream().readAllBytes(), StandardCharsets.UTF_8 );
+			var connection = URI.create( LIST_URL ).toURL().openConnection();
+			connection.setConnectTimeout( 30000 );
+			connection.setReadTimeout( 30000 );
+			String payload;
+			try ( var input = connection.getInputStream() ) {
+				payload = new String( input.readAllBytes(), StandardCharsets.UTF_8 );
+			}
 			List<BoxLangVersionInfo>	entries	= new ArrayList<>();
 			Matcher						matcher	= CONTENTS_PATTERN.matcher( payload );
 			while ( matcher.find() ) {
@@ -125,6 +131,10 @@ public final class BoxLangVersionCatalog {
 	private static String extractFirst( String payload, Pattern pattern ) {
 		Matcher matcher = pattern.matcher( payload );
 		return matcher.find() ? matcher.group( 1 ) : null;
+	}
+
+	static Semver parseMinimumVersion( String value ) {
+		return value == null ? null : parseSemver( value.trim().replaceFirst( "^(?:[~^]|>=\\s*)", "" ) );
 	}
 
 	private static Semver parseSemver( String value ) {

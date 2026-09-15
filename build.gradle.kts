@@ -107,3 +107,9 @@ tasks {
 tasks.named("check") {
   dependsOn("spotlessCheck")
 }
+
+// Optional integration test against local runtime/module artifacts, isolated from application projects.
+tasks.test {
+  systemProperty("boxlang.liveRuntimeJar", providers.gradleProperty("boxlangLiveRuntimeJar").getOrElse(""))
+  systemProperty("boxlang.liveLspModule", providers.gradleProperty("boxlangLiveLspModule").getOrElse(""))
+}
