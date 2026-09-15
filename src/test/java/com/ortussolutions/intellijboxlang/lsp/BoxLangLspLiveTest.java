@@ -16,8 +16,10 @@ public class BoxLangLspLiveTest extends BasePlatformTestCase {
 	public void testRealServerInitializationDiagnosticsAndRestart() throws Exception {
 		String	runtimeProperty	= System.getProperty( "boxlang.liveRuntimeJar", "" );
 		String	moduleProperty	= System.getProperty( "boxlang.liveLspModule", "" );
-		org.junit.Assume.assumeTrue( "Supply boxlangLiveRuntimeJar and boxlangLiveLspModule to run live LSP verification",
-		    !runtimeProperty.isBlank() && !moduleProperty.isBlank() );
+		// BasePlatformTestCase uses the JUnit 3 runner, which treats JUnit 4 assumptions as failures.
+		// CI has no local runtime artifacts; return before integration assertions in that case.
+		if ( runtimeProperty.isBlank() || moduleProperty.isBlank() )
+			return;
 		Path	runtime			= Path.of( runtimeProperty );
 		String	version			= runtime.getFileName().toString().replaceFirst( "\\.jar$", "" );
 		Path	cache			= BoxLangStoragePaths.getRuntimeCacheRoot().resolve( version );

@@ -21,7 +21,7 @@ The opt-in `BoxLangLspLiveTest` accepts two Gradle properties:
 - `-PboxlangLiveRuntimeJar=/path/to/boxlang-VERSION.jar`
 - `-PboxlangLiveLspModule=/path/to/boxlang-lsp/build/module`
 
-Run it with `./gradlew test --tests '*BoxLangLspLiveTest'` and those properties. It uses an isolated module/home, initializes a real language server through the plugin service, requests a CFML diagnostic, checks editor error highlighting and correction clearing, exercises local-function shadowing, project named arguments and typed-array member completion through IntelliJ completion, and retries the server. Without the properties, this integration test is explicitly skipped. This test does not install the plugin into your normal IDE profile.
+Run it with `./gradlew test --tests '*BoxLangLspLiveTest'` and those properties. It uses an isolated module/home, initializes a real language server through the plugin service, requests a CFML diagnostic, checks editor error highlighting and correction clearing, exercises local-function shadowing, project named arguments and typed-array member completion through IntelliJ completion, and retries the server. Without the properties, this opt-in test returns before its integration assertions; the ordinary CI suite does not validate a live LSP. This test does not install the plugin into your normal IDE profile.
 
 Windows/IDEA 2025.3 migration, pinned/open tabs, recent files, and Local History still need live migration verification. The migration guide retains those limits.
 
