@@ -765,8 +765,25 @@ public final class BoxLangLspClientService implements com.intellij.openapi.Dispo
 			if ( project.isDisposed() ) {
 				return;
 			}
-			DaemonCodeAnalyzer.getInstance( project ).restart();
+			restartDaemonForDiagnostics();
 		} );
+	}
+
+	private void restartDaemonForDiagnostics() {
+		DaemonCodeAnalyzer analyzer = DaemonCodeAnalyzer.getInstance( project );
+		try {
+			// The reason overload was added after our 2024.2 minimum platform version.
+			DaemonCodeAnalyzer.class.getMethod( "restart", Object.class )
+			    .invoke( analyzer, "BoxLang LSP diagnostics updated" );
+		} catch ( NoSuchMethodException e ) {
+			try {
+				DaemonCodeAnalyzer.class.getMethod( "restart" ).invoke( analyzer );
+			} catch ( ReflectiveOperationException failure ) {
+				throw new IllegalStateException( "Unable to restart IntelliJ highlighting", failure );
+			}
+		} catch ( ReflectiveOperationException e ) {
+			throw new IllegalStateException( "Unable to restart IntelliJ highlighting", e );
+		}
 	}
 
 	private int allocatePort() throws IOException {
