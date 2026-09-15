@@ -17,7 +17,6 @@ public final class BoxLangVersionCatalog {
 	private static final String		DOWNLOAD_BASE		= "https://downloads.ortussolutions.com/";
 	private static final Pattern	KEY_PATTERN			= Pattern.compile( "<Key>([^<]+)</Key>" );
 	private static final Pattern	MODIFIED_PATTERN	= Pattern.compile( "<LastModified>([^<]+)</LastModified>" );
-	private static final Pattern	CONTENTS_PATTERN	= Pattern.compile( "<Contents>(.*?)</Contents>", Pattern.DOTALL );
 	private static final Pattern	JAR_NAME_PATTERN	= Pattern.compile( "^boxlang-[0-9A-Za-z.+-]+$", Pattern.CASE_INSENSITIVE );
 
 	private BoxLangVersionCatalog() {
@@ -87,36 +86,51 @@ public final class BoxLangVersionCatalog {
 			connection.setReadTimeout( 30000 );
 			String payload;
 			try ( var input = connection.getInputStream() ) {
-				payload = new String( input.readAllBytes(), StandardCharsets.UTF_8 );
+				byte[] bytes = input.readNBytes( 10_000_001 );
+				if ( bytes.length > 10_000_000 )
+					throw new IOException( "BoxLang version listing is too large." );
+				payload = new String( bytes, StandardCharsets.UTF_8 );
 			}
-			List<BoxLangVersionInfo>	entries	= new ArrayList<>();
-			Matcher						matcher	= CONTENTS_PATTERN.matcher( payload );
-			while ( matcher.find() ) {
-				String	block			= matcher.group( 1 );
-				String	key				= extractFirst( block, KEY_PATTERN );
-				String	modifiedValue	= extractFirst( block, MODIFIED_PATTERN );
-				if ( key == null || modifiedValue == null ) {
-					continue;
-				}
-				String lowerKey = key.toLowerCase();
-				if ( !lowerKey.endsWith( ".jar" )
-				    || lowerKey.contains( "javadoc" )
-				    || lowerKey.contains( "sources" )
-				    || lowerKey.contains( "snapshot" ) ) {
-					continue;
-				}
-				String fileName = key.substring( key.lastIndexOf( '/' ) + 1, key.length() - 4 );
-				if ( !JAR_NAME_PATTERN.matcher( fileName ).matches() ) {
-					continue;
-				}
-				Semver	version		= parseSemver( fileName );
-				String	downloadUrl	= DOWNLOAD_BASE + key;
-				entries.add( new BoxLangVersionInfo( fileName, downloadUrl, Instant.parse( modifiedValue ), version ) );
-			}
-			return entries;
+			return parseEntries( payload );
 		} catch ( Exception e ) {
 			throw new IOException( "Unable to resolve BoxLang version list.", e );
 		}
+	}
+
+	static List<BoxLangVersionInfo> parseEntries( String payload ) {
+		List<BoxLangVersionInfo>	entries	= new ArrayList<>();
+		int							cursor	= 0;
+		while ( true ) {
+			int open = payload.indexOf( "<Contents>", cursor );
+			if ( open < 0 )
+				break;
+			int	blockStart	= open + "<Contents>".length();
+			int	close		= payload.indexOf( "</Contents>", blockStart );
+			if ( close < 0 )
+				break;
+			String block = payload.substring( blockStart, close );
+			cursor = close + "</Contents>".length();
+			String	key				= extractFirst( block, KEY_PATTERN );
+			String	modifiedValue	= extractFirst( block, MODIFIED_PATTERN );
+			if ( key == null || modifiedValue == null ) {
+				continue;
+			}
+			String lowerKey = key.toLowerCase();
+			if ( !lowerKey.endsWith( ".jar" )
+			    || lowerKey.contains( "javadoc" )
+			    || lowerKey.contains( "sources" )
+			    || lowerKey.contains( "snapshot" ) ) {
+				continue;
+			}
+			String fileName = key.substring( key.lastIndexOf( '/' ) + 1, key.length() - 4 );
+			if ( !JAR_NAME_PATTERN.matcher( fileName ).matches() ) {
+				continue;
+			}
+			Semver	version		= parseSemver( fileName );
+			String	downloadUrl	= DOWNLOAD_BASE + key;
+			entries.add( new BoxLangVersionInfo( fileName, downloadUrl, Instant.parse( modifiedValue ), version ) );
+		}
+		return entries;
 	}
 
 	private static List<String> extractAll( String payload, Pattern pattern ) {

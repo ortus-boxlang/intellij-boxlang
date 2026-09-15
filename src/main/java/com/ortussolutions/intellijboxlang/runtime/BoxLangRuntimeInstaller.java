@@ -8,8 +8,11 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Pattern;
 
 public final class BoxLangRuntimeInstaller {
+
+	private static final Pattern CACHE_VERSION = Pattern.compile( "^boxlang-[0-9A-Za-z.+-]+$" );
 
 	private BoxLangRuntimeInstaller() {
 	}
@@ -18,9 +21,9 @@ public final class BoxLangRuntimeInstaller {
 		if ( downloadUrl == null || downloadUrl.isBlank() ) {
 			throw new IOException( "Missing BoxLang download URL for " + resolvedVersion );
 		}
+		Path	versionDir	= cacheVersionDirectory( resolvedVersion );
 		String	filename	= resolvedVersion + ".jar";
 		URL		url			= URI.create( downloadUrl ).toURL();
-		Path	versionDir	= BoxLangStoragePaths.getRuntimeCacheRoot().resolve( resolvedVersion );
 		Files.createDirectories( versionDir );
 
 		Path jarPath = versionDir.resolve( filename );
@@ -33,7 +36,7 @@ public final class BoxLangRuntimeInstaller {
 	}
 
 	public static BoxLangRuntimeSelection resolveCachedJar( String resolvedVersion ) throws IOException {
-		Path	versionDir	= BoxLangStoragePaths.getRuntimeCacheRoot().resolve( resolvedVersion );
+		Path	versionDir	= cacheVersionDirectory( resolvedVersion );
 		Path	jarPath		= versionDir.resolve( resolvedVersion + ".jar" );
 		if ( !isValidRuntimeJar( jarPath ) ) {
 			return null;
@@ -42,6 +45,18 @@ public final class BoxLangRuntimeInstaller {
 		selection.jarPath			= jarPath;
 		selection.resolvedVersion	= resolvedVersion;
 		return selection;
+	}
+
+	private static Path cacheVersionDirectory( String resolvedVersion ) throws IOException {
+		if ( resolvedVersion == null || !CACHE_VERSION.matcher( resolvedVersion ).matches() ) {
+			throw new IOException( "Invalid BoxLang runtime version name: " + resolvedVersion );
+		}
+		Path	cacheRoot	= BoxLangStoragePaths.getRuntimeCacheRoot().toAbsolutePath().normalize();
+		Path	directory	= cacheRoot.resolve( resolvedVersion ).normalize();
+		if ( !cacheRoot.equals( directory.getParent() ) ) {
+			throw new IOException( "BoxLang runtime version escapes the cache directory: " + resolvedVersion );
+		}
+		return directory;
 	}
 
 	static void installJar( URL url, Path jarPath, ProgressIndicator indicator ) throws IOException {

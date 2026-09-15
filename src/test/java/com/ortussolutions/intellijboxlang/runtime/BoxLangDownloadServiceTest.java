@@ -124,6 +124,24 @@ public class BoxLangDownloadServiceTest extends BasePlatformTestCase {
 		assertNotNull( BoxLangRuntimeResolver.findCachedRuntime( directory, "1.11.0", false ) );
 	}
 
+	public void testRuntimeCacheRejectsUntrustedVersionPaths() throws Exception {
+		for ( String version : new String[] { "../outside", "boxlang-1.2.3/../../outside", "boxlang-1.2.3\\..\\outside", "boxlang-1.2.3\"}" } ) {
+			try {
+				BoxLangRuntimeInstaller.resolveCachedJar( version );
+				fail( "Unsafe version accepted: " + version );
+			} catch ( IOException expected ) {
+				assertTrue( expected.getMessage().contains( "Invalid BoxLang runtime version" ) );
+			}
+			try {
+				BoxLangRuntimeInstaller.installRuntime( version, "https://example.invalid/runtime.jar", null );
+				fail( "Unsafe download version accepted: " + version );
+			} catch ( IOException expected ) {
+				assertTrue( expected.getMessage().contains( "Invalid BoxLang runtime version" ) );
+			}
+		}
+		assertNull( BoxLangRuntimeInstaller.resolveCachedJar( "boxlang-1.2.3" ) );
+	}
+
 	private Path existing() throws IOException {
 		return Files.writeString( directory.resolve( "runtime.jar" ), "old" );
 	}
