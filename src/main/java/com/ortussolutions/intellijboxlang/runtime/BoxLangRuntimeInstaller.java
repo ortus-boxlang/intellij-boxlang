@@ -48,12 +48,13 @@ public final class BoxLangRuntimeInstaller {
 	}
 
 	private static Path cacheVersionDirectory( String resolvedVersion ) throws IOException {
-		if ( resolvedVersion == null || !CACHE_VERSION.matcher( resolvedVersion ).matches() ) {
+		if ( resolvedVersion == null || resolvedVersion.contains( ".." ) || resolvedVersion.contains( "/" )
+		    || resolvedVersion.contains( "\\" ) || !CACHE_VERSION.matcher( resolvedVersion ).matches() ) {
 			throw new IOException( "Invalid BoxLang runtime version name: " + resolvedVersion );
 		}
 		Path	cacheRoot	= BoxLangStoragePaths.getRuntimeCacheRoot().toAbsolutePath().normalize();
 		Path	directory	= cacheRoot.resolve( resolvedVersion ).normalize();
-		if ( !cacheRoot.equals( directory.getParent() ) ) {
+		if ( !directory.startsWith( cacheRoot ) || !cacheRoot.equals( directory.getParent() ) ) {
 			throw new IOException( "BoxLang runtime version escapes the cache directory: " + resolvedVersion );
 		}
 		return directory;

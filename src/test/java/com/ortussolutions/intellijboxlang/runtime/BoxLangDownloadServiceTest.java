@@ -125,7 +125,7 @@ public class BoxLangDownloadServiceTest extends BasePlatformTestCase {
 	}
 
 	public void testRuntimeCacheRejectsUntrustedVersionPaths() throws Exception {
-		for ( String version : new String[] { "../outside", "boxlang-1.2.3/../../outside", "boxlang-1.2.3\\..\\outside", "boxlang-1.2.3\"}" } ) {
+		for ( String version : new String[] { "../outside", "boxlang-..", "boxlang-1.2.3/../../outside", "boxlang-1.2.3\\..\\outside", "boxlang-1.2.3\"}" } ) {
 			try {
 				BoxLangRuntimeInstaller.resolveCachedJar( version );
 				fail( "Unsafe version accepted: " + version );
