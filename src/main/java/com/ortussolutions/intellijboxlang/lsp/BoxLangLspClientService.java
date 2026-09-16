@@ -823,11 +823,34 @@ public final class BoxLangLspClientService implements com.intellij.openapi.Dispo
 	}
 
 	private String resolveJavaExecutable( BoxLangResolvedSettings settings ) {
-		if ( settings.javaHome == null || settings.javaHome.isBlank() ) {
-			return "java";
-		}
 		String javaExecutable = SystemInfo.isWindows ? "java.exe" : "java";
-		return Path.of( settings.javaHome, "bin", javaExecutable ).toString();
+
+		if ( settings.javaHome != null && !settings.javaHome.isBlank() ) {
+			Path configuredJava = Path.of( settings.javaHome, "bin", javaExecutable );
+			if ( configuredJava.toFile().exists() ) {
+				return configuredJava.toString();
+			}
+		}
+
+		// IntelliJ 2024.2+ runs on Java 21, which is also the minimum required by BoxLang.
+		// Prefer it over PATH/JAVA_HOME, which commonly still point to Java 17 on Windows.
+		String ideJavaHome = System.getProperty( "java.home" );
+		if ( ideJavaHome != null && !ideJavaHome.isBlank() ) {
+			Path ideJava = Path.of( ideJavaHome, "bin", javaExecutable );
+			if ( ideJava.toFile().exists() ) {
+				return ideJava.toString();
+			}
+		}
+
+		String javaHomeEnv = System.getenv( "JAVA_HOME" );
+		if ( javaHomeEnv != null && !javaHomeEnv.isBlank() ) {
+			Path environmentJava = Path.of( javaHomeEnv, "bin", javaExecutable );
+			if ( environmentJava.toFile().exists() ) {
+				return environmentJava.toString();
+			}
+		}
+
+		return "java";
 	}
 
 	private List<String> buildJvmArgs( BoxLangResolvedSettings settings ) {
