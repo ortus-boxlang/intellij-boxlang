@@ -2,7 +2,7 @@ plugins {
   id("java")
   id("org.jetbrains.kotlin.jvm") version "1.9.25"
   id("org.jetbrains.intellij.platform") version "2.3.0"
-  id("com.diffplug.spotless") version "8.2.1"
+  id("com.diffplug.spotless") version "8.10.4"
 }
 
 group = "com.ortussolutions"
