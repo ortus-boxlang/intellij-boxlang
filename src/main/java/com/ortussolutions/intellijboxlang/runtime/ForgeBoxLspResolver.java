@@ -55,12 +55,12 @@ public final class ForgeBoxLspResolver {
 			throw new IOException( "Unable to locate latest bx-lsp download URL." );
 		}
 		ForgeBoxLspDescriptor descriptor = new ForgeBoxLspDescriptor();
-		descriptor.downloadUrl	= downloadUrl;
 		descriptor.version		= getString( latest, "version" );
+		descriptor.downloadUrl	= ForgeBoxDownloadResolver.resolve( downloadUrl, "bx-lsp", descriptor.version );
 		return descriptor;
 	}
 
-	private static ForgeBoxLspDescriptor resolveVersion( JsonObject data, String version ) {
+	private static ForgeBoxLspDescriptor resolveVersion( JsonObject data, String version ) throws IOException {
 		if ( !data.has( "versions" ) || !data.get( "versions" ).isJsonArray() ) {
 			return null;
 		}
@@ -73,7 +73,7 @@ public final class ForgeBoxLspResolver {
 			if ( version.equals( entryVersion ) ) {
 				ForgeBoxLspDescriptor descriptor = new ForgeBoxLspDescriptor();
 				descriptor.version		= entryVersion;
-				descriptor.downloadUrl	= getString( entry, "downloadURL" );
+				descriptor.downloadUrl	= ForgeBoxDownloadResolver.resolve( getString( entry, "downloadURL" ), "bx-lsp", entryVersion );
 				return descriptor;
 			}
 		}

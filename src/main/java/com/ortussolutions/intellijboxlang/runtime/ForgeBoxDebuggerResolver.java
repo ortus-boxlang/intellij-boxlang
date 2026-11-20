@@ -55,12 +55,12 @@ public final class ForgeBoxDebuggerResolver {
 			throw new IOException( "Unable to locate latest bx-debugger download URL." );
 		}
 		ForgeBoxDebuggerDescriptor descriptor = new ForgeBoxDebuggerDescriptor();
-		descriptor.downloadUrl	= downloadUrl;
 		descriptor.version		= getString( latest, "version" );
+		descriptor.downloadUrl	= ForgeBoxDownloadResolver.resolve( downloadUrl, "bx-debugger", descriptor.version );
 		return descriptor;
 	}
 
-	private static ForgeBoxDebuggerDescriptor resolveVersion( JsonObject data, String version ) {
+	private static ForgeBoxDebuggerDescriptor resolveVersion( JsonObject data, String version ) throws IOException {
 		if ( !data.has( "versions" ) || !data.get( "versions" ).isJsonArray() ) {
 			return null;
 		}
@@ -73,7 +73,7 @@ public final class ForgeBoxDebuggerResolver {
 			if ( version.equals( entryVersion ) ) {
 				ForgeBoxDebuggerDescriptor descriptor = new ForgeBoxDebuggerDescriptor();
 				descriptor.version		= entryVersion;
-				descriptor.downloadUrl	= getString( entry, "downloadURL" );
+				descriptor.downloadUrl	= ForgeBoxDownloadResolver.resolve( getString( entry, "downloadURL" ), "bx-debugger", entryVersion );
 				return descriptor;
 			}
 		}
